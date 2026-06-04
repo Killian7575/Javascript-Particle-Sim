@@ -50,5 +50,6 @@ A 2D particle simulation where colored particles attract or repel each other bas
 ### Key PixiJS v8 notes
 - Use `new PIXI.Particle({ texture, x, y, tint })` — not `Sprite`
 - Use `particleContainer.addParticle(p)` / `particleContainer.update()`
-- `dynamicProperties.position: true` is already set — position updates are GPU-synced on `update()`
+- `dynamicProperties.position: true` is already set — position updates sync to GPU automatically each frame without needing `update()`
+- `particleContainer.update()` is only needed when a **static** property (one not listed in `dynamicProperties`) is changed at runtime
 - `ticker.deltaTime` is the frame delta passed into `updateParticles`
