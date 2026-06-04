@@ -82,7 +82,7 @@ function initParticles(count: number) {
   // - Assign random color from COLORS keys
   // - Create a Particle using: new PIXI.Particle({ texture: colorTextures[color], x, y })
   // - Add to particleContainer using: particleContainer.addParticle(particle)
-  // - Store particle, color, vx, vy, x, y in the particles array
+  // - Store particle, color, x, y in the particles array
   // Hint: Use Math.random() * app.screen.width, etc.
   // let allParticles: PIXI.Particle[] = []
   const colorKeys = Object.keys(COLORS) as TypeColorKey[];
@@ -101,6 +101,8 @@ function initParticles(count: number) {
 }
 
 // --- Apply color-based rules (all logic is yours) ---
+// Planned rules to start off:
+// Blue attacts both, red and green repel, all same strength
 function applyRules(p1: Particle, p2: Particle): { fx: number; fy: number } {
   // TODO for YOU:
   // - Compute dx = p2.x - p1.x, dy = p2.y - p1.y
@@ -111,6 +113,7 @@ function applyRules(p1: Particle, p2: Particle): { fx: number; fy: number } {
 }
 
 // --- Update all particles ---
+// Also add slight friction
 function updateParticles(dt: number) {
   // TODO for YOU:
   // 1. Reset forces for all particles (use temporary arrays)
