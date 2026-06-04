@@ -9,16 +9,7 @@ const COLORS = {
 
 type TypeColorKey = keyof typeof COLORS;
 
-// --- Type for a particle ---
-// Note: In v8, we use the lightweight Particle class instead of Sprite
-type Particle = {
-  particle: PIXI.Particle;     // v8 Particle object (not Sprite)
-  color: TypeColorKey;
-  x: number;
-  y: number;
-};
-
-let particles: Particle[] = [];
+let particles: PIXI.Particle[] = [];
 let particleContainer: PIXI.ParticleContainer;
 let app: PIXI.Application;
 
@@ -75,6 +66,7 @@ async function setup() {
   });
 }
 // --- Initialize particles ---
+
 function initParticles(count: number) {
   // TODO for YOU:
   // - Loop 'count' times
@@ -84,7 +76,6 @@ function initParticles(count: number) {
   // - Add to particleContainer using: particleContainer.addParticle(particle)
   // - Store particle, color, x, y in the particles array
   // Hint: Use Math.random() * app.screen.width, etc.
-  // let allParticles: PIXI.Particle[] = []
   const colorKeys = Object.keys(COLORS) as TypeColorKey[];
   for (let i = 0; i < count; i++) {
       let randomCOLORKey = colorKeys[Math.floor(Math.random() * colorKeys.length)];
@@ -93,9 +84,11 @@ function initParticles(count: number) {
         texture,
         x: Math.random() * app.screen.width,
         y: Math.random() * app.screen.height,
-        tint: COLORS[randomCOLORKey]
+        tint: COLORS[randomCOLORKey],
+        anchorX: 0.5, // Set the particle centre
+        anchorY: 0.5  // to be its origin for rotation/scaling
       });
-      // particles.push(particle)
+      particles.push(particle)
       particleContainer.addParticle(particle)
   }
 }
@@ -103,7 +96,7 @@ function initParticles(count: number) {
 // --- Apply color-based rules (all logic is yours) ---
 // Planned rules to start off:
 // Blue attacts both, red and green repel, all same strength
-function applyRules(p1: Particle, p2: Particle): { fx: number; fy: number } {
+function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: number } {
   // TODO for YOU:
   // - Compute dx = p2.x - p1.x, dy = p2.y - p1.y
   // - Compute distance (or squared distance for performance)
