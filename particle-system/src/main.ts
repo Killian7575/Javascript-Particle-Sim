@@ -18,7 +18,7 @@ let particles: PIXI.Particle[] = [];
 let particleContainer: PIXI.ParticleContainer;
 let app: PIXI.Application;
 
-const frictionMultiplier = 0.7;
+const frictionMultiplier = 0.5;
 
 // --- Create a texture (shared across all particles for performance) ---
 // In v8, we create a single CanvasTexture that all particles reuse
@@ -66,7 +66,7 @@ async function setup() {
   app.stage.addChild(particleContainer);
   
   // Create particles (you write this)
-  initParticles(100);
+  initParticles(1000);
   
   // Start the update loop
   app.ticker.add((ticker) => {
@@ -104,14 +104,28 @@ function initParticles(count: number) {
   }
 }
 
-function calcDistanceStrength(distanceSq: number) {
+function normaliseVector(p1: { x: number, y:number }, p2: { x: number, y: number }): {nx: number; ny: number; distance: number } {
+  // 
+  // d^2 = x^2 + y^2
+  // normalise direction vector: directions / distance
+  let dx = p2.x - p1.x; // distance in x
+  let dy = p2.y - p1.y; // distance in y
+  let distance = Math.sqrt(dx ** 2 + dy ** 2)
+
+  let nx = dx / distance // normalised x and y vector
+  let ny = dx / distance
+
+  return { nx, ny, distance }
+}
+
+function calcDistanceStrength(distance: number) {
   let strength: number;
-  if (distanceSq <= 100) { // 10^2, x = 10 is where formula starts at 1
+  if (distance <= 100) { // 10, x = 10 is where formula starts at 1
     strength = 1;
-  } else if (distanceSq >= 10000) { // 100^2, at x = 100 formula is 0.1
+  } else if (distance >= 100) { // 100, at x = 100 formula is 0.1
     strength = 0;
   } else {
-    strength = 10 / Math.sqrt(distanceSq);
+    strength = 10 / distance;
   }
   return strength;
 }
@@ -145,12 +159,14 @@ function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: num
   let repely = -diry * baseForce * distanceMulti;
   let attracty = diry * baseForce * distanceMulti
   
+  // directional fix idea: dir = dis / magnitude
+
   switch (p2.tint) {
     case COLORS.BLUE:
       switch (p1.tint) {
         case COLORS.BLUE: // blue effect on blue
-          fx = attractx // attract
-          fy = attracty
+          fx = repelx * 0.05 
+          fy = repelx * 0.05
           break;
         case COLORS.RED: // blue effect on red
           fx = attractx // attract
@@ -231,15 +247,19 @@ function updateParticles(dt: number) {
     // for now i will clamp for simplicity
     if (forceTarget.x > app.screen.width) {
       forceTarget.x = app.screen.width;
+      forceTarget.vx *= -1.2
     }
     if (forceTarget.x < 0) {
       forceTarget.x = 0
+      forceTarget.vx *= -1.2
     }
     if (forceTarget.y > app.screen.height) {
       forceTarget.y = app.screen.height;
+      forceTarget.vx *= -1.2
     }
     if (forceTarget.y < 0) {
       forceTarget.y = 0
+      forceTarget.vx *= -1.2
     }
     forceTarget.vx *= frictionMultiplier; // dampen velocity
     forceTarget.vy *= frictionMultiplier;
