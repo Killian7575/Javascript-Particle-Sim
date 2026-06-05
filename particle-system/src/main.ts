@@ -15,7 +15,7 @@ interface vParticle extends PIXI.Particle {
   vx: number,
   vy: number
 }
-let particles: PIXI.Particle[] = [];
+let particles: vParticle[] = [];
 let particleContainer: PIXI.ParticleContainer;
 let app: PIXI.Application;
 
@@ -132,7 +132,7 @@ function calcDistanceStrength(distance: number) {
   let strength: number;
   if (distance <= 10) { // 10, x = 10 is where formula starts at 1
     strength = 1;
-  } else if (distance > 100) { // 100, at x = 100 formula is 0.1
+  } else if (distance > 100) { // 100, at x = 100, formula would be 0.1
     strength = 0;
   } else {
     strength = 10 / distance;
@@ -148,7 +148,7 @@ function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: num
   let fx = 0;
   let fy = 0;
 
-  let { nx, ny, distance: distance } = normaliseVector(p1, p2)
+  let { nx, ny, distance } = normaliseVector(p1, p2)
 
   let distanceMulti = calcDistanceStrength(distance);
   let baseForce = 1;
@@ -235,7 +235,7 @@ function updateParticles(dt: number) {
   let liveFriction = Math.pow(targetFriction, dt/60)
 
   for (let i = 0; i < particles.length; i++) {
-    let forceTarget = particles[i] as vParticle;
+    let forceTarget = particles[i];
     let sumForce = { fx: 0, fy: 0 };
     for (let j = 0; j < particles.length; j++) {
       let forceSource = particles[j];
