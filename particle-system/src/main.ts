@@ -21,7 +21,7 @@ let app: PIXI.Application;
 
 let debugCounter = 0;
 let debugCounter2 = 0;
-const frictionMultiplier = 0.5;
+const targetFriction = 0.15;
 
 // --- Create a texture (shared across all particles for performance) ---
 // In v8, we create a single CanvasTexture that all particles reuse
@@ -68,8 +68,8 @@ async function setup() {
   
   app.stage.addChild(particleContainer);
   
-  // Create particles (you write this)
-  initParticles(200);
+  // Create particles 
+  initParticles(1000);
   
   // Start the update loop
   app.ticker.add((ticker) => {
@@ -80,14 +80,6 @@ async function setup() {
 // --- Initialize particles ---
 
 function initParticles(count: number) {
-  // TODO for YOU:
-  // - Loop 'count' times
-  // - Assign random positions (x, y) within screen width/height
-  // - Assign random color from COLORS keys
-  // - Create a Particle using: new PIXI.Particle({ texture: colorTextures[color], x, y })
-  // - Add to particleContainer using: particleContainer.addParticle(particle)
-  // - Store particle, color, x, y in the particles array
-  // Hint: Use Math.random() * app.screen.width, etc.
   const colorKeys = Object.keys(COLORS) as TypeColorKey[];
   for (let i = 0; i < count; i++) {
       let randomCOLORKey = colorKeys[Math.floor(Math.random() * colorKeys.length)];
@@ -108,7 +100,6 @@ function initParticles(count: number) {
 }
 
 function normaliseVector(p1: { x: number, y:number }, p2: { x: number, y: number }): {nx: number; ny: number; distance: number } {
-  // 
   // d^2 = x^2 + y^2
   // normalise direction vector: directions / magnitude
   if (p1.x === p2.x && p1.y === p2.y) { // duplicate position bypass
@@ -141,7 +132,7 @@ function calcDistanceStrength(distance: number) {
   let strength: number;
   if (distance <= 10) { // 10, x = 10 is where formula starts at 1
     strength = 1;
-  } else if (distance >= 100) { // 100, at x = 100 formula is 0.1
+  } else if (distance > 100) { // 100, at x = 100 formula is 0.1
     strength = 0;
   } else {
     strength = 10 / distance;
@@ -149,30 +140,23 @@ function calcDistanceStrength(distance: number) {
   return strength;
 }
 
-// --- Apply color-based rules (all logic is yours) ---
+// --- Apply color-based rules ---
 // Planned rules to start off:
 // Blue attacts both, red and green repel, all same strength
 function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: number } {
   // Apply force to p1 based on p2
-  // TODO for YOU:
-  // - Compute dx = p2.x - p1.x, dy = p2.y - p1.y
-  // - Compute distance (or squared distance for performance)
-  // - Based on p1.color and p2.color, decide attraction or repulsion
-  // - Return force vector to apply to p1 
   let fx = 0;
   let fy = 0;
 
   let { nx, ny, distance: distance } = normaliseVector(p1, p2)
 
   let distanceMulti = calcDistanceStrength(distance);
-  let baseForce = 0.2;
+  let baseForce = 1;
   
   let repelx = -nx * baseForce * distanceMulti; // implementation
   let attractx = nx * baseForce * distanceMulti; 
   let repely = -ny * baseForce * distanceMulti;
   let attracty = ny * baseForce * distanceMulti;
-
-  // directional fix idea: dir = dis / magnitude
 
   if (debugCounter2 === 0) {
     debugCounter2++;
@@ -235,9 +219,7 @@ function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: num
 }
 
 // --- Update all particles ---
-// Also add slight friction
 function updateParticles(dt: number) {
-  // TODO for YOU:
   // 1. Reset forces for all particles (use temporary arrays)
   // 2. Nested loops
   //    Accumulate total forces for each particle
@@ -248,6 +230,10 @@ function updateParticles(dt: number) {
   
   // If a "static" property is changed, add the below line to end to update it in the renderer
   // particleContainer.update();
+
+  // 60th (scaled by dt) root to get "friction" remaining velocity after 60 updates (dt 1 is at 60fps)
+  let liveFriction = Math.pow(targetFriction, dt/60)
+
   for (let i = 0; i < particles.length; i++) {
     let forceTarget = particles[i] as vParticle;
     let sumForce = { fx: 0, fy: 0 };
@@ -280,8 +266,10 @@ function updateParticles(dt: number) {
       forceTarget.y = 0
       forceTarget.vy *= -1
     }
-    forceTarget.vx *= frictionMultiplier; // dampen velocity
-    forceTarget.vy *= frictionMultiplier;
+    
+    forceTarget.vx *= liveFriction;
+    forceTarget.vy *= liveFriction;
+
   }
 
 }
