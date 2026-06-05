@@ -9,6 +9,7 @@ const COLORS = {
 
 type TypeColorKey = keyof typeof COLORS;
 
+const buffer = 20
 
 interface vParticle extends PIXI.Particle {
   vx: number,
@@ -18,6 +19,8 @@ let particles: PIXI.Particle[] = [];
 let particleContainer: PIXI.ParticleContainer;
 let app: PIXI.Application;
 
+let debugCounter = 0;
+let debugCounter2 = 0;
 const frictionMultiplier = 0.5;
 
 // --- Create a texture (shared across all particles for performance) ---
@@ -41,10 +44,10 @@ async function setup() {
   
   // Initialize asynchronously with options
   await app.init({
-    width: window.innerWidth,
-    height: window.innerHeight,
+    width: window.innerWidth - buffer,
+    height: window.innerHeight - buffer,
     backgroundColor: 0x111111,
-    resizeTo: window,
+    // resizeTo: window,
   });
   
   document.body.appendChild(app.canvas);
@@ -66,7 +69,7 @@ async function setup() {
   app.stage.addChild(particleContainer);
   
   // Create particles (you write this)
-  initParticles(1000);
+  initParticles(200);
   
   // Start the update loop
   app.ticker.add((ticker) => {
@@ -107,20 +110,36 @@ function initParticles(count: number) {
 function normaliseVector(p1: { x: number, y:number }, p2: { x: number, y: number }): {nx: number; ny: number; distance: number } {
   // 
   // d^2 = x^2 + y^2
-  // normalise direction vector: directions / distance
+  // normalise direction vector: directions / magnitude
+  if (p1.x === p2.x && p1.y === p2.y) { // duplicate position bypass
+    return { nx: 0, ny: 0, distance: 0 }
+  }
   let dx = p2.x - p1.x; // distance in x
   let dy = p2.y - p1.y; // distance in y
-  let distance = Math.sqrt(dx ** 2 + dy ** 2)
 
-  let nx = dx / distance // normalised x and y vector
-  let ny = dx / distance
+  let magnitude = Math.sqrt(dx ** 2 + dy ** 2)
 
-  return { nx, ny, distance }
+  let nx = dx / magnitude // normalised x and y vector
+  let ny = dy / magnitude
+
+  if (debugCounter === 0) { //first particle pair snapshot
+    debugCounter++;
+    console.log(`Debug:`)
+    console.log(`p1 x, y: ${p1.x}, ${p1.y}`)
+    console.log(`p2 x, y: ${p2.x}, ${p2.y}`)
+    console.log(`dx: ${dx}`)
+    console.log(`dy: ${dy}`)
+    console.log(`magnitude: ${magnitude}`)
+    console.log(`nx, ny: ${nx}, ${ny}`)
+    console.log(`should equal 1 theoretically: ${Math.sqrt(nx**2 + ny**2)}`)
+  }
+
+  return { nx, ny, distance: magnitude }
 }
 
 function calcDistanceStrength(distance: number) {
   let strength: number;
-  if (distance <= 100) { // 10, x = 10 is where formula starts at 1
+  if (distance <= 10) { // 10, x = 10 is where formula starts at 1
     strength = 1;
   } else if (distance >= 100) { // 100, at x = 100 formula is 0.1
     strength = 0;
@@ -143,34 +162,34 @@ function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: num
   let fx = 0;
   let fy = 0;
 
-  // note to self: distance^2 to source is (sourcex - targetx)^2 + (sourcey - targety)^2
-  let disx = p2.x - p1.x; // distance in x
-  let disy = p2.y - p1.y; // distance in y
-  let squareDistance = Math.abs(disx ** 2 + disy ** 2); // total distance squared
-  let dirx = Math.sign(disx); // x direction
-  let diry = Math.sign(disy); // y direction
-  
+  let { nx, ny, distance: distance } = normaliseVector(p1, p2)
 
-  let distanceMulti = calcDistanceStrength(squareDistance);
-  let baseForce = 0.5;
-
-  let repelx = -dirx * baseForce * distanceMulti;
-  let attractx = dirx * baseForce * distanceMulti;
-  let repely = -diry * baseForce * distanceMulti;
-  let attracty = diry * baseForce * distanceMulti
+  let distanceMulti = calcDistanceStrength(distance);
+  let baseForce = 0.2;
   
+  let repelx = -nx * baseForce * distanceMulti; // implementation
+  let attractx = nx * baseForce * distanceMulti; 
+  let repely = -ny * baseForce * distanceMulti;
+  let attracty = ny * baseForce * distanceMulti;
+
   // directional fix idea: dir = dis / magnitude
 
-  switch (p2.tint) {
+  if (debugCounter2 === 0) {
+    debugCounter2++;
+    console.log(`p1.tint, p2.tint: ${p1.tint}, ${p2.tint}`)
+    console.log((`blue, red, green: ${COLORS.BLUE}, ${COLORS.RED}, ${COLORS.GREEN}`))
+  }
+
+  switch (p2.tint) { // Planned: implement UI for live adjustment of magic number, lowest priority
     case COLORS.BLUE:
       switch (p1.tint) {
         case COLORS.BLUE: // blue effect on blue
           fx = repelx * 0.05 
-          fy = repelx * 0.05
+          fy = repely * 0.05
           break;
         case COLORS.RED: // blue effect on red
-          fx = attractx // attract
-          fy = attracty
+          fx = attractx * 1// attract
+          fy = attracty * 1
           break; 
         case COLORS.GREEN: // blue effect on green
           fx = repelx * 0.5// repel
@@ -181,12 +200,12 @@ function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: num
     case COLORS.RED:
       switch (p1.tint) {
         case COLORS.BLUE: // red effect on blue
-          fx = attractx // attract
-          fy = attracty
+          fx = attractx * 1// attract
+          fy = attracty * 1
           break;
         case COLORS.RED: // red effect on red
-          fx = attractx // attract
-          fy = attracty
+          fx = attractx * 0.75// attract
+          fy = attracty * 0.75
           break; 
         case COLORS.GREEN: // red effect on green
           fx = repelx * 0.5// repel
@@ -197,12 +216,12 @@ function applyRules(p1: PIXI.Particle, p2: PIXI.Particle): { fx: number; fy: num
     case COLORS.GREEN:
       switch (p1.tint) {
         case COLORS.BLUE: // green effect on blue
-          fx = attractx // attract
-          fy = attracty
+          fx = attractx * 1// attract
+          fy = attracty * 1
           break;
         case COLORS.RED: // green effect on red
-          fx = attractx // attract
-          fy = attracty
+          fx = attractx * 1// attract
+          fy = attracty * 1
           break; 
         case COLORS.GREEN: // green effect on green
           fx = repelx * 0.5// repel
@@ -244,22 +263,22 @@ function updateParticles(dt: number) {
     forceTarget.vy += sumForce.fy * dt;
     forceTarget.x += forceTarget.vx * dt; // apply velocity to particle
     forceTarget.y += forceTarget.vy * dt;
-    // for now i will clamp for simplicity
+    // for now i will bounce for simplicity
     if (forceTarget.x > app.screen.width) {
       forceTarget.x = app.screen.width;
-      forceTarget.vx *= -1.2
+      forceTarget.vx *= -1
     }
     if (forceTarget.x < 0) {
       forceTarget.x = 0
-      forceTarget.vx *= -1.2
+      forceTarget.vx *= -1
     }
     if (forceTarget.y > app.screen.height) {
       forceTarget.y = app.screen.height;
-      forceTarget.vx *= -1.2
+      forceTarget.vy *= -1
     }
     if (forceTarget.y < 0) {
       forceTarget.y = 0
-      forceTarget.vx *= -1.2
+      forceTarget.vy *= -1
     }
     forceTarget.vx *= frictionMultiplier; // dampen velocity
     forceTarget.vy *= frictionMultiplier;
