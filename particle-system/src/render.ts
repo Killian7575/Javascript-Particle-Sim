@@ -30,13 +30,18 @@ export class Renderer {
     //       this.renderParticles.push(p);  this.container.addParticle(p);
 
     this.texture = (() => {
+      const diameter = 8
+      const radius = diameter/2
       const canvas = document.createElement('canvas');
-      canvas.width = 8;
-      canvas.height = 8;
+      canvas.width = diameter;
+      canvas.height = diameter;
       const ctx = canvas.getContext('2d')!;
-      ctx.fillStyle = 'white';
+      const gradient = ctx.createRadialGradient(radius,radius,0,radius,radius,radius);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');   // opaque centre
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');   // transparent edge
+      ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(4, 4, 3, 0, 2 * Math.PI);
+      ctx.fillRect(0, 0, diameter, diameter)
       ctx.fill();
       return Texture.from(canvas);
     })();
@@ -47,7 +52,8 @@ export class Renderer {
         vertex: false,   // Static vertices
         uvs: false,     // Static texture coordinates
         color: false     // Static colors
-      }
+      },
+      blendMode: 'add'
     });
     this.palette = buildPalette(sim.numTypes)
     for (let i = 0; i < sim.count; i++) {
