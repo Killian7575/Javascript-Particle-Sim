@@ -30,5 +30,16 @@ export function force(r: number, a: number, rMax: number, beta: number): number 
   //         t < beta  -> universal repulsion, ramps strong-push@0 -> 0@beta (ignores `a`)
   //         t < 1     -> a * triangular peak between beta and 1
   //         else      -> 0
-  return 0;
+
+  // M1:
+  let strength = 0;
+  if (r <= 10) { // 10, x = 10 is where formula starts at 1
+    strength = 1;
+  } else if (r > 100) { // 100, at x = 100, formula would be 0.1
+    strength = 0;
+  } else {
+    strength = 10 / r;
+  }
+  
+  return strength * a;
 }
