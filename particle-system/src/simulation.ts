@@ -35,8 +35,10 @@ export class ParticleSimulator {
   width: number;       // integrator clamps to these; main passes app.screen.*
   height: number;
 
-  // Born at M2 — the rules MATRIX is state, so it lives here, on the sim:
-  // rules!: Float32Array;   // numTypes*numTypes, each in [-1, 1]
+  // Born at M2 — the rules MATRIX is state, so it lives here, on the sim.
+  // rules[a * numTypes + b] answers "how does type a feel toward type b?"
+  // The `!` tells TS "assigned before first use" (we call initRules in constructor).
+  rules!: Float32Array;   // numTypes*numTypes, each in [-1, 1]
 
   constructor(count: number, numTypes: number, width: number, height: number) {
 
@@ -54,7 +56,47 @@ export class ParticleSimulator {
     this.accX = new Float32Array(count);
     this.accY = new Float32Array(count);
 
-    this.seed()
+    this.rules = new Float32Array(numTypes * numTypes);
+    this.initRules();
+    this.seed();
+  }
+
+  /**
+   * Populate the rules matrix with initial hand-set values that reproduce
+   * the feel of your old tempSwitch behaviour (for eyeball-verification that
+   * the table lookup gives the same result as the switch did).
+   *
+   * Row = the type that FEELS the force (index i in the pair loop).
+   * Col = the type that CAUSES the force (index j).
+   * So `rules[a * numTypes + b]` = "how does type a respond to nearby type b?"
+   *
+   * Example of the 2D → 1D indexing for a 3-type system (numTypes = 3):
+   *
+   *           b=0   b=1   b=2
+   *   a=0  [  0,    1,    2  ]
+   *   a=1  [  3,    4,    5  ]
+   *   a=2  [  6,    7,    8  ]
+   *
+   *   rules[1 * 3 + 2] = rules[5]  → "how does type 1 feel toward type 2?"
+   *
+   * Tip: read the body of tempSwitch below carefully. For each (p1, p2) case,
+   * the `a` value it returns is the entry you need at rules[p1 * numTypes + p2].
+   */
+  initRules() {
+    // TODO (you): fill this.rules[a * this.numTypes + b] for every (a, b) pair.
+    // Start by translating each `case` in tempSwitch into one table assignment.
+    // When you're done, the sim should look identical with tempSwitch removed.
+    /* Cool rule sets:
+    1. with legacy force curve [ -0.7824554443359375, -0.5159652233123779, -0.7399479150772095, 0.7869302034378052, -0.7077521681785583, 0.7734294533729553, -0.9772785305976868, 0.8419510126113892, -0.7135220766067505 ]
+    
+       OG rule set:
+    1. [-0.05, 1, 1, 1, 0.75, 1, -0.5, -0.5, -0.5]
+    */
+    this.rules = new Float32Array([ -0.7824554443359375, -0.5159652233123779, -0.7399479150772095, 0.7869302034378052, -0.7077521681785583, 0.7734294533729553, -0.9772785305976868, 0.8419510126113892, -0.7135220766067505 ])
+    // for (let i = 0; i < this.rules.length; i++) { // randomiser for later
+    //   this.rules[i] = Math.random() * 2 - 1;
+    // }
+    // console.log(this.rules) // a way to save cool rulesets
   }
 
   /** (Re)randomise positions and types in place; zero velocities. */
@@ -77,11 +119,11 @@ export class ParticleSimulator {
     //   const { posX, posY, velX, velY, accX, accY, count } = this; --- DONE
     // No Pixi here. main.ts calls renderer.sync(this) AFTER this returns.
 
-    const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction } = this;
+    const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction, rules, numTypes } = this;
     accX.fill(0);
     accY.fill(0);
     const liveFriction = Math.pow(friction, dt/60)
-
+    // i affected by j logic
     for (let i = 0; i < count; i++){
       for (let j = 0; j < count; j++) {
         if (i !== j) {
@@ -96,8 +138,8 @@ export class ParticleSimulator {
           // Compute normalised vector
           const nx = dx / distance;
           const ny = dy / distance;
-          // Affinity coefficient, temp as switch case
-          const a: number = this.tempSwitch(type[i], type[j]);
+          // Affinity coefficient.
+          const a: number = rules[type[i] * numTypes + type[j]]
           // Compute force
           const f = force(distance, a, rMax, beta);
           // Accumulate 
@@ -131,66 +173,4 @@ export class ParticleSimulator {
     }
 
   }
-  tempSwitch(p1: number, p2: number) {
-    // IMPORTANT:
-    // I'm aware this is inefficient to call in hot loop
-    // This switch takes a lot screen space, so putting it here makes working on the file easier and easier to remove when its time to
-    let a = 0
-    if (p1 >= 3 || p2 >= 3) {
-      // more than 3 types out of scope till switch is moved away from
-      return a
-    }
-    switch (p2) { // Planned: implement UI for live adjustment of magic number, lowest priority
-      case 0:
-        switch (p1) {
-          case 0: // blue effect on blue
-            a = -0.05 //repen
-            
-            break;
-          case 1: // blue effect on red
-            a = 1// attract
-           
-            break; 
-          case 2: // blue effect on green
-            a = -0.5// repel
-            
-            break;
-        }
-        break;
-      case 1:
-        switch (p1) {
-          case 0: // red effect on blue
-            a = 1// attract
-            
-            break;
-          case 1: // red effect on red
-            a = 0.75// attract
-            
-            break; 
-          case 2: // red effect on green
-            a = -0.5// repel
-            
-            break;
-        }
-        break;
-      case 2:
-        switch (p1) {
-          case 0: // green effect on blue
-            a = 1// attract
-            
-            break;
-          case 1: // green effect on red
-            a = 1// attract
-            
-            break; 
-          case 2: // green effect on green
-            a = -0.5// repel
-            
-            break;
-        }
-        break;
-      }
-    return a;
-  }
-  
 }
