@@ -29,9 +29,10 @@ export class ParticleSimulator {
   // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
   count: number;
   numTypes: number;
+  speed = 0.1;
   rMax = 100;          // interaction radius (== future CELL_SIZE at M5)
   beta = 0.3;          // fraction of rMax that is pure repulsion (M3)
-  friction = 0.15;     // was targetFriction (main.ts:24)
+  friction = 0.05;     // was targetFriction (main.ts:24)
   width: number;       // integrator clamps to these; main passes app.screen.*
   height: number;
 
@@ -119,7 +120,7 @@ export class ParticleSimulator {
     //   const { posX, posY, velX, velY, accX, accY, count } = this; --- DONE
     // No Pixi here. main.ts calls renderer.sync(this) AFTER this returns.
 
-    const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction, rules, numTypes } = this;
+    const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction, rules, numTypes, speed } = this;
     accX.fill(0);
     accY.fill(0);
     const liveFriction = Math.pow(friction, dt/60)
@@ -133,6 +134,8 @@ export class ParticleSimulator {
           const dy = posY[j] - posY[i];
           // Zero magnitude guard
           if (dx === 0 && dy === 0) continue;
+          // Too far away to matter
+          if (dx*dx + dy*dy > rMax*rMax) continue;
           // Compute magnitude, named as distance
           const distance = Math.sqrt(dx ** 2 + dy ** 2);
           // Compute normalised vector
@@ -143,8 +146,8 @@ export class ParticleSimulator {
           // Compute force
           const f = force(distance, a, rMax, beta);
           // Accumulate 
-          accX[i] += f * nx;
-          accY[i] += f * ny; 
+          accX[i] += f * nx * speed;
+          accY[i] += f * ny * speed; 
         } // note to self: after M3 check if 2 particles with same pos, type and vel ever separate
       }
       // accumulate velocity

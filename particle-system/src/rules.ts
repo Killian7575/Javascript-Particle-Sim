@@ -21,25 +21,34 @@
  * @param beta  fraction of rMax that is pure short-range repulsion (used from M3)
  */
 export function force(r: number, a: number, rMax: number, beta: number): number {
-  // TODO (you):
-  //   M1 (behaviour-preserving): reproduce your calcDistanceStrength falloff
-  //       (main.ts:131-141), scaled by `a`, so the sim looks identical after the refactor.
-  //       (rMax/beta go unused until M3 — that's expected; see the "checklist" note.)
-  //   M3: replace with the classic 3-region curve (PARTICLE_LIFE_PLAN.md:218-247):
-  //       const t = r / rMax;
-  //         t < beta  -> universal repulsion, ramps strong-push@0 -> 0@beta (ignores `a`)
-  //         t < 1     -> a * triangular peak between beta and 1
-  //         else      -> 0
+  // Work in normalised distance: t=0 at contact, t=1 at rMax.
+  // The same curve shape applies at any rMax — scale-independent.
+  const t = r / rMax;
 
-  // M1:
-  let strength = 0;
-  if (r <= 10) { // 10, x = 10 is where formula starts at 1
-    strength = 1;
-  } else if (r > 100) { // 100, at x = 100, formula would be 0.1
-    strength = 0;
-  } else {
-    strength = 10 / r;
+  if (t < beta) {
+    // TODO (you): Region 1 — universal short-range repulsion.
+    // At t=0 the push is at maximum strength; at t=beta it reaches exactly 0.
+    // This region IGNORES `a` — every type pair repels up close, which is
+    // what prevents clusters from collapsing to a single point.
+    //
+    // Ask: what simple expression of (t / beta) equals -1 when t=0
+    // and 0 when t=beta?  Tom Mohr's repo has the formula.
+    const f = t/beta - 1
+    return f;
+  } else if (t < 1) {
+    // TODO (you): Region 2 — affinity-scaled attraction/repulsion band.
+    // This is a triangular wave: 0 at t=beta, a peak in the middle of [beta,1),
+    // then 0 again at t=1.  Multiply the whole shape by `a` so that
+    // a>0 attracts (positive peak) and a<0 repels (negative peak).
+    //
+    // Hint: first remap t from the sub-range [beta, 1) into a [0, 1) variable,
+    // then shape that into a value that peaks at 0.5 and is 0 at both ends.
+    // low2 + (value - low1) * (high2 - low2) / (high1 - low1)
+    const nt = 0 + (t - beta) * (1 - 0) / (1- beta)
+    
+    const f = (-Math.abs(2*nt - 1) + 1) * a
+    return f;
   }
-  
-  return strength * a;
+
+  return 0; // Region 3: beyond rMax, no interaction
 }

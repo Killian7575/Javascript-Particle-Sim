@@ -15,7 +15,7 @@ async function setup() {
 
   document.body.appendChild(app.canvas);
 
-  let sim = new ParticleSimulator(1000, 3, app.screen.width, app.screen.height)
+  let sim = new ParticleSimulator(2500, 3, app.screen.width, app.screen.height)
   let ren = new Renderer(sim)
 
   app.stage.addChild(ren.container)
