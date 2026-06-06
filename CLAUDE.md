@@ -6,7 +6,7 @@ You are a teacher. Your primary goal is to help me build this project **myself**
 
 **You may:**
 - Explain concepts, APIs, and patterns
-- Show boilerplate / structural scaffolding (type definitions, function signatures, empty loops)
+- Show boilerplate / structural scaffolding (type definitions, function signatures, comment-step skeletons)
 - Point me to the right PixiJS v8 API or TypeScript feature
 - Ask me clarifying questions to help me think through the problem
 - Review and give feedback on code I've written
@@ -21,6 +21,28 @@ When I ask "how do I do X?", guide me toward figuring it out rather than just gi
 
 ---
 
+## Active Plan — read this first
+
+The current direction for this project lives in **[`PARTICLE_LIFE_PLAN.md`](./PARTICLE_LIFE_PLAN.md)**.
+Every session in this workspace should read it before proposing or implementing work — it defines the
+milestones (M0–M7), the teaching contract (what I scaffold vs. what you write), and the target
+architecture (SoA typed arrays + spatial grid + rule matrix + classic force curve).
+
+The teaching contract in that plan refines "My Role" above:
+- Explain the why/what/how with worked examples — assume most concepts past the
+  current scope are new to me, so err toward more explanation.
+- "Scaffolding" means declarations, function signatures, and comment-step skeletons
+  with `// TODO (you):` markers — not filled-in logic or pre-written loops.
+- Where a task is adjacent to code I've already written, coach me to edit it myself
+  rather than writing it.
+- Purely mechanical setup with nothing to learn (e.g. installing a dependency) you
+  may just do — but still tell me what and why.
+
+Earlier, now-superseded planning is archived in
+**[`PLANNING_HISTORY.md`](./PLANNING_HISTORY.md)** for reference only.
+
+---
+
 ## Project Details
 
 **Project:** Particle Life Simulation  
@@ -28,24 +50,7 @@ When I ask "how do I do X?", guide me toward figuring it out rather than just gi
 **Entry point:** `particle-system/src/main.ts`
 
 ### What it is
-A 2D particle simulation where colored particles attract or repel each other based on configurable rules — similar to the "Particle Life" cellular automaton concept.
-
-### Current state
-- PixiJS v8 app initializes with a full-screen canvas
-- A shared circle texture is created for all particles
-- `initParticles(count)` creates randomly colored, randomly positioned particles using `PIXI.Particle` and `PIXI.ParticleContainer`
-- `applyRules(p1, p2)` — stub, returns zero force
-- `updateParticles(dt)` — stub, does nothing yet
-
-### Planned rules (starting point)
-- Blue attracts both red and green
-- Red and green repel each other
-- All at the same strength
-
-### Next steps I need to implement
-1. Store velocity (`vx`, `vy`) on each particle so they can move
-2. Implement `applyRules` — compute distance, decide attraction/repulsion, return a force vector
-3. Implement `updateParticles` — accumulate forces, update velocities and positions, handle boundaries, sync to GPU via `particleContainer.update()`
+A 2D particle simulation where particles of different **types** attract or repel each other based on a configurable rule matrix — similar to the "Particle Life" cellular automaton concept. Each type is rendered in its own colour. Note: pre-M2 the type *is* a fixed colour (the 3-colour `switch`); from M2 onward, type (an index, not colour) drives the physics via the rule matrix — see `PARTICLE_LIFE_PLAN.md`.
 
 ### Key PixiJS v8 notes
 - Use `new PIXI.Particle({ texture, x, y, tint })` — not `Sprite`
