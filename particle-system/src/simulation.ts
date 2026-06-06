@@ -39,13 +39,6 @@ export class ParticleSimulator {
   // rules!: Float32Array;   // numTypes*numTypes, each in [-1, 1]
 
   constructor(count: number, numTypes: number, width: number, height: number) {
-    // NOTE: no `constructor(public count: number, ...)` shorthand — parameter
-    // properties are banned by erasableSyntaxOnly (tsconfig.json:19). Assign by hand.
-    // TODO (you):
-    //   - assign count / numTypes / width / height to the fields above --- DONE
-    //   - allocate posX/posY/velX/velY (Float32Array), type (Uint8Array), 
-    //     and accX/accY (Float32Array), all at length `count` --- DONE
-    //   - this.seed(); --- DONE
 
     this.count = count;
     this.numTypes = numTypes;
@@ -66,9 +59,6 @@ export class ParticleSimulator {
 
   /** (Re)randomise positions and types in place; zero velocities. */
   seed() {
-    // TODO (you): your old initParticles fill (main.ts:84-97) MINUS the Pixi part:
-    //   posX[i] = random in [0, width);  posY[i] = random in [0, height); --- DONE
-    //   type[i] = random integer 0..numTypes-1;  velX[i] = velY[i] = 0. ---
 
     for (let i = 0; i < this.count; i++) {
       this.posX[i] = Math.random() * this.width;
@@ -85,22 +75,6 @@ export class ParticleSimulator {
   update(dt: number) {
     // Hoist this.* to locals ONCE so the hot loop touches locals, not this.posX[i]:
     //   const { posX, posY, velX, velY, accX, accY, count } = this; --- DONE
-
-    // TODO (you): the same maths as your old updateParticles (main.ts:222-273), on arrays:
-    //   1. zero accX / accY --- DONE
-    //   2. for i, for j != i:
-    //        - geometry inline: dx, dy, dist, and the unit direction nx, ny
-    //          (this is your normaliseVector body, main.ts:108-114, inlined)
-    //        - coefficient: M1 -> a switch on (type[i], type[j]) reproducing your
-    //          applyRules coefficients (main.ts:167-216), keyed on index not tint;
-    //          M2 -> a = this.rules[type[i] * numTypes + type[j]]  (in-place swap)
-    //        - f = force(dist, a, this.rMax, this.beta);
-    //          accX[i] += f * nx;  accY[i] += f * ny;
-    //        - M3: add `if (dx*dx + dy*dy > rMax*rMax) continue;` BEFORE the sqrt
-    //        - M5: replace the inner `for j` with the 3x3 spatial-grid walk
-    //   3. velX[i] += accX[i] * dt;  velY[i] += accY[i] * dt
-    //   4. posX[i] += velX[i] * dt;  posY[i] += velY[i] * dt
-    //   5. boundaries (your bounce, main.ts:253-268) + friction (Math.pow, main.ts:235)
     // No Pixi here. main.ts calls renderer.sync(this) AFTER this returns.
 
     const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction } = this;
@@ -110,7 +84,7 @@ export class ParticleSimulator {
 
     for (let i = 0; i < count; i++){
       for (let j = 0; j < count; j++) {
-        if (i != j) {
+        if (i !== j) {
           
           // Compute vector direction
           const dx = posX[j] - posX[i];
