@@ -26,6 +26,13 @@ export class ParticleSimulator {
   private readonly accX: Float32Array;
   private readonly accY: Float32Array;
 
+  // --- spatial grid (M5): rebuilt every frame in buildGrid() ---
+  // cellMap: cell index -> array of particle indices in that cell.
+  // cellCols / cellRows: grid dimensions (computed from width/height and rMax).
+  private cellMap: Map<number, number[]> = new Map();
+  private cellCols = 0;
+  private cellRows = 0;
+
   // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
   count: number;
   numTypes: number;
@@ -114,6 +121,51 @@ export class ParticleSimulator {
 
   }
 
+  /**
+   * Bin every particle into a flat grid so the pair loop only checks the 3×3
+   * block of cells around each particle.  Cell side = rMax guarantees that any
+   * in-range neighbour is within that block (max distance == one cell side).
+   */
+  private buildGrid(): void {
+    const { posX, posY, count, rMax, width, height } = this;
+    let { cellCols, cellRows, cellMap } = this;
+
+    // TODO (you): Step 1 — compute this.cellCols and this.cellRows.
+    //   You need enough columns to cover the full width; Math.ceil handles the
+    //   edge (a cell that starts inside the field must exist even if it only
+    //   partially covers the right/bottom boundary).
+    //   Question to answer: if width=500 and rMax=100, how many columns do you need?
+    cellCols = Math.ceil(height / rMax);
+    cellRows = Math.ceil(width / rMax);
+
+    // TODO (you): Step 2 — clear this.cellMap so no stale indices from last frame remain.
+    //   The Map has a method for this.
+    cellMap.clear();
+
+    // TODO (you): Step 3 — for every particle i, compute its cell and add it to the map.
+    //   a. cx = Math.floor(posX[i] / rMax)   — which column does it sit in?
+    //   b. cy = Math.floor(posY[i] / rMax)   — which row?
+    //   c. flat index = cx + cy * this.cellCols   (same row*width+col as the rule matrix)
+    //   d. If this.cellMap already has an array at that index, push i into it.
+    //      Otherwise create a fresh [i] array at that key.
+    //      Hint: Map.has / Map.get / Map.set, or a single Map.get with a fallback.
+    for (let i = 0; i < count; i++){
+      const cx = Math.floor(posX[i] / rMax);
+      const cy = Math.floor(posY[i] / rMax);
+      
+      const cellIndex = cx + cy * cellCols;
+      const bucket = cellMap.get(cellIndex)
+
+      if (bucket) {
+        bucket.push(i)
+      } else {
+        cellMap.set(cellIndex, [i])
+      }
+    }
+    
+
+  }
+
   /** Advance the sim by `dt` (PixiJS ticker.deltaTime; 1 == one frame @60fps). */
   update(dt: number) {
     // Hoist this.* to locals ONCE so the hot loop touches locals, not this.posX[i]:
@@ -121,10 +173,20 @@ export class ParticleSimulator {
     // No Pixi here. main.ts calls renderer.sync(this) AFTER this returns.
 
     const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction, rules, numTypes, speed } = this;
+
+    this.buildGrid();
+    const { cellMap, cellCols, cellRows } = this;
+
     accX.fill(0);
     accY.fill(0);
     const liveFriction = Math.pow(friction, dt/60)
-    // i affected by j logic
+
+    // TODO (you) M5: replace the inner j-loop below with a 3×3 grid walk.
+    //   For each i: find its cell, walk the 9 neighbour cells, iterate each bucket.
+    //   Use j > i to process each pair once — apply force to both i and j.
+    //   For j's force: negate the direction; swap the rule-matrix indices.
+    //   Integration stays in the same outer-i loop, unchanged.
+    //   Delete this old O(n²) loop once the grid walk is working.
     for (let i = 0; i < count; i++){
       for (let j = 0; j < count; j++) {
         if (i !== j) {
