@@ -36,7 +36,7 @@ export class ParticleSimulator {
   // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
   count: number;
   numTypes: number;
-  speed = 0.1;
+  speed = 1;
   rMax = 100;          // interaction radius (== future CELL_SIZE at M5)
   beta = 0.3;          // fraction of rMax that is pure repulsion (M3)
   friction = 0.05;     // was targetFriction (main.ts:24)
@@ -128,15 +128,15 @@ export class ParticleSimulator {
    */
   private buildGrid(): void {
     const { posX, posY, count, rMax, width, height } = this;
-    let { cellCols, cellRows, cellMap } = this;
+    let { cellMap } = this;
 
     // TODO (you): Step 1 — compute this.cellCols and this.cellRows.
     //   You need enough columns to cover the full width; Math.ceil handles the
     //   edge (a cell that starts inside the field must exist even if it only
     //   partially covers the right/bottom boundary).
     //   Question to answer: if width=500 and rMax=100, how many columns do you need?
-    cellCols = Math.ceil(height / rMax);
-    cellRows = Math.ceil(width / rMax);
+    this.cellCols = Math.ceil(width / rMax);
+    this.cellRows = Math.ceil(height / rMax);
 
     // TODO (you): Step 2 — clear this.cellMap so no stale indices from last frame remain.
     //   The Map has a method for this.
@@ -152,12 +152,12 @@ export class ParticleSimulator {
     for (let i = 0; i < count; i++){
       const cx = Math.floor(posX[i] / rMax);
       const cy = Math.floor(posY[i] / rMax);
-      
-      const cellIndex = cx + cy * cellCols;
-      const bucket = cellMap.get(cellIndex)
 
-      if (bucket) {
-        bucket.push(i)
+      const cellIndex = cx + cy * this.cellCols;
+      const cell = cellMap.get(cellIndex)
+
+      if (cell) {
+        cell.push(i)
       } else {
         cellMap.set(cellIndex, [i])
       }
@@ -177,9 +177,59 @@ export class ParticleSimulator {
     this.buildGrid();
     const { cellMap, cellCols, cellRows } = this;
 
+    // let currentT: number;
+
     accX.fill(0);
     accY.fill(0);
     const liveFriction = Math.pow(friction, dt/60)
+
+    function processPair(pi: number, pj: number): void {
+      const dx = posX[pj] - posX[pi];
+      const dy = posY[pj] - posY[pi];
+      // Zero magnitude guard
+      if (dx === 0 && dy === 0) return;
+      // Too far away to matter
+      if (dx*dx + dy*dy > rMax*rMax) return;
+      // Compute magnitude, named as distance
+      const distance = Math.sqrt(dx ** 2 + dy ** 2);
+      // Compute normalised vector
+      const nx = dx / distance;
+      const ny = dy / distance;
+      // Affinity coefficient.
+      const a: number = rules[type[pi] * numTypes + type[pj]]
+      // Compute force
+      const f = force(distance, a, rMax, beta);
+      // Accumulate 
+      accX[pi] += f * nx * speed;
+      accY[pi] += f * ny * speed; 
+
+      // Again but j affected by i
+      const a2: number = rules[type[pj] * numTypes + type[pi]]
+      const f2 = force(distance, a2, rMax, beta);
+      // Accumulate 
+      accX[pj] += f2 * -nx * speed;
+      accY[pj] += f2 * -ny * speed;
+    }
+    function process2ParticleBuckets(b1: number[], b2: number[]) {
+      if (b2.length > 0 && b1.length > 0)  {
+        for (let i = 0; i < b1.length; i++){
+          for (let j = 0; j < b2.length; j++) {
+            processPair(b1[i], b2[j])
+          }
+        }
+      }
+    }
+
+    function processWithinBucket(b: number[]) {
+      for (let i = 0; i < b.length; i++){
+        for (let j = 0; j < b.length; j++) {
+          if (j > i) {
+            processPair(b[i], b[j])
+          }
+        }
+      }
+    }
+
 
     // TODO (you) M5: replace the inner j-loop below with a 3×3 grid walk.
     //   For each i: find its cell, walk the 9 neighbour cells, iterate each bucket.
@@ -187,31 +237,130 @@ export class ParticleSimulator {
     //   For j's force: negate the direction; swap the rule-matrix indices.
     //   Integration stays in the same outer-i loop, unchanged.
     //   Delete this old O(n²) loop once the grid walk is working.
-    for (let i = 0; i < count; i++){
-      for (let j = 0; j < count; j++) {
-        if (i !== j) {
-          
-          // Compute vector direction
-          const dx = posX[j] - posX[i];
-          const dy = posY[j] - posY[i];
-          // Zero magnitude guard
-          if (dx === 0 && dy === 0) continue;
-          // Too far away to matter
-          if (dx*dx + dy*dy > rMax*rMax) continue;
-          // Compute magnitude, named as distance
-          const distance = Math.sqrt(dx ** 2 + dy ** 2);
-          // Compute normalised vector
-          const nx = dx / distance;
-          const ny = dy / distance;
-          // Affinity coefficient.
-          const a: number = rules[type[i] * numTypes + type[j]]
-          // Compute force
-          const f = force(distance, a, rMax, beta);
-          // Accumulate 
-          accX[i] += f * nx * speed;
-          accY[i] += f * ny * speed; 
-        } // note to self: after M3 check if 2 particles with same pos, type and vel ever separate
+    for (let cols = 0; cols < cellCols; cols += 2) {
+      for (let rows = 0; rows < cellRows; rows += 2) {
+        // 5 step 3x3 Z walk pattern:
+        // init cell: check all 8 adj + self
+        const s1Check = [0,1,2,3,5,6,7,8];
+        // col + 1: check the 2 up and 2 down + self
+        const s2Check = [1,2,7,8];
+        // row + 1: check 1 to right and all 3 behind + self
+        const s3Check = [3,6,8];
+        // col/row + 1: check self
+        // const s4Check = []
+        // col - 1 check row - 1
+        const s5Check = [1];
+        const cellGroup: Array<number[] | undefined> = [];
+        // get 3x3 cells centred on current cell
+        for (let yIndex = -1; yIndex < 2; yIndex++) {
+          for (let xIndex = -1; xIndex < 2; xIndex++) {
+            if (cols + xIndex < cellCols && rows + yIndex < cellRows){
+              cellGroup.push(cellMap.get((cols + xIndex) + (rows + yIndex) * cellCols));
+            } else {
+              cellGroup.push(undefined);
+            }
+          }
+        }
+        
+        for (let t = 0; t < 5; t++) {
+          let cell: number[] = [];
+          let checkCells: number[] = [];
+          switch (t) {
+            case 0:
+              cell = cellGroup[4] ?? [];
+              checkCells = s1Check.map(index => cellGroup[index])
+                                  .filter((cell): cell is number[] => Boolean(cell))
+                                  .flat(1)
+              processWithinBucket(cell)
+
+              break;
+            case 1:
+              cell = cellGroup[5] ?? [];
+              checkCells = s2Check.map(index => cellGroup[index])
+                                  .filter((cell): cell is number[] => Boolean(cell))
+                                  .flat(1)
+              processWithinBucket(cell)
+              break;
+            case 2:
+              cell = cellGroup[7] ?? [];
+              checkCells = s3Check.map(index => cellGroup[index])
+                                  .filter((cell): cell is number[] => Boolean(cell))
+                                  .flat(1)
+              processWithinBucket(cell)
+              break;
+            case 3:
+              cell = cellGroup[8] ?? [];
+              checkCells = []
+              processWithinBucket(cell)
+              break;
+            case 4:
+              cell = cellGroup[3] ?? [];
+              checkCells = s5Check.map(index => cellGroup[index])
+                                  .filter((cell): cell is number[] => Boolean(cell))
+                                  .flat(1)
+              break;
+          }
+          process2ParticleBuckets(cell, checkCells)
+          // for (let i = 0; i < cell.length; i++){
+          //       for (let j = 0; j < checkCells.length; j++) {
+          //         if (checkCells[j] !== cell[i]) {
+          //           // Compute vector direction
+          //           const dx = posX[checkCells[j]] - posX[cell[i]];
+          //           const dy = posY[checkCells[j]] - posY[cell[i]];
+          //           // Zero magnitude guard
+          //           if (dx === 0 && dy === 0) continue;
+          //           // Too far away to matter
+          //           if (dx*dx + dy*dy > rMax*rMax) continue;
+          //           // Compute magnitude, named as distance
+          //           const distance = Math.sqrt(dx ** 2 + dy ** 2);
+          //           // Compute normalised vector
+          //           const nx = dx / distance;
+          //           const ny = dy / distance;
+          //           // Affinity coefficient.
+          //           const a1: number = rules[type[cell[i]] * numTypes + type[checkCells[j]]]
+          //           // Compute force
+          //           const f1 = force(distance, a1, rMax, beta);
+          //           // Accumulate 
+          //           accX[cell[i]] += f1 * nx * speed;
+          //           accY[cell[i]] += f1 * ny * speed; 
+                    
+          //           // Again but j affected by i
+          //           const a2: number = rules[type[checkCells[j]] * numTypes + type[cell[i]]]
+          //           const f2 = force(distance, a2, rMax, beta);
+          //           // Accumulate 
+          //           accX[checkCells[j]] += f2 * -nx * speed;
+          //           accY[checkCells[j]] += f2 * -ny * speed;
+
+          //           if (this.sanityCheckRunYet === 0) {
+          //             this.sanityParticlePairsChecked[cell[i] + checkCells[j] * count] += 1;
+          //             this.sanityParticlePairsChecked[checkCells[j] + cell[i] * count] += 1;                      
+          //           }
+                    
+          //         }
+          //       }
+          //     }
+        }
+      
       }
+    }
+    // if (this.sanityCheckRunYet === 0) {
+    //   this.sanityCheckRunYet++
+    //   console.log("count: " + count)
+    //   console.log("count^2: " + count*count);
+    //   console.log("checkedparticlespairs.length: " + this.sanityParticlePairsChecked.length)
+    //   console.log(this.sanityParticlePairsChecked)
+    //   let accume: Map<number, number> = new Map
+    //   for (let i = 0; i < this.sanityParticlePairsChecked.length; i++) {
+    //     const key = this.sanityParticlePairsChecked[i];
+    //     accume.set(key, (accume.get(key) ?? 0) + 1);
+    //   }
+    //   accume.forEach(function(value, key) {
+    //       console.log('there are ' + value + ' particles interacted with ' + key + ' times')
+    //   });
+    //   console.log(accume)
+      
+    // }
+    for (let i = 0; i < count; i++) {
       // accumulate velocity
       velX[i] += accX[i] * dt;
       velY[i] += accY[i] * dt;
@@ -237,5 +386,61 @@ export class ParticleSimulator {
       velY[i] *= liveFriction;
     }
 
+    // --- old O(count²) loop ---
+    // for (let i = 0; i < count; i++){
+    //   for (let j = 0; j < count; j++) {
+    //     if (i !== j) {
+          
+    //       // Compute vector direction
+    //       const dx = posX[j] - posX[i];
+    //       const dy = posY[j] - posY[i];
+    //       // Zero magnitude guard
+    //       if (dx === 0 && dy === 0) continue;
+    //       // Too far away to matter
+    //       if (dx*dx + dy*dy > rMax*rMax) continue;
+    //       // Compute magnitude, named as distance
+    //       const distance = Math.sqrt(dx ** 2 + dy ** 2);
+    //       // Compute normalised vector
+    //       const nx = dx / distance;
+    //       const ny = dy / distance;
+    //       // Affinity coefficient.
+    //       const a: number = rules[type[i] * numTypes + type[j]]
+    //       // Compute force
+    //       const f = force(distance, a, rMax, beta);
+    //       // Accumulate 
+    //       accX[i] += f * nx * speed;
+    //       accY[i] += f * ny * speed; 
+    //     } // note to self: after M3 check if 2 particles with same pos, type and vel ever separate
+    //   }
+    //   // accumulate velocity
+    //   velX[i] += accX[i] * dt;
+    //   velY[i] += accY[i] * dt;
+    //   // apply velocity to pos
+    //   posX[i] += velX[i] * dt;
+    //   posY[i] += velY[i] * dt;
+    //   // bounce off edge
+    //   if (posX[i] > width) {
+    //     posX[i] = width;
+    //     velX[i] *= -1
+    //   } else if (posX[i] < 0) {
+    //     posX[i] = 0
+    //     velX[i] *= -1
+    //   }
+    //   if (posY[i] > height) {
+    //     posY[i] = height;
+    //     velY[i] *= -1
+    //   } else if (posY[i] < 0) {
+    //     posY[i] = 0
+    //     velY[i] *= -1
+    //   }
+    //   velX[i] *= liveFriction;
+    //   velY[i] *= liveFriction;
+    // }
+
   }
+}
+
+
+function debugSanityCheck() {
+
 }
