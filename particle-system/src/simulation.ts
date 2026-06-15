@@ -10,6 +10,7 @@
 
 import { force } from './rules.ts';
 //       ^ VALUE import (we call force() at runtime), so NOT `import type`.
+const BENCH_ENABLED = import.meta.env.DEV;
 
 export class ParticleSimulator {
   // --- SoA state: particle i is (posX[i], posY[i], velX[i], velY[i], type[i]) ---
@@ -514,9 +515,4 @@ export class ParticleSimulator {
     // }
 
   }
-}
-
-
-function debugSanityCheck() {
-
 }

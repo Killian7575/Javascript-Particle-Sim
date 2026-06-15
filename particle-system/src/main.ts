@@ -1,6 +1,9 @@
 import { ParticleSimulator } from './simulation.js';
 import { Renderer } from './render.js';
 import { Application, Ticker } from 'pixi.js';
+import { BenchmarkingTool } from './benchmark.js';
+
+const BENCH_ENABLED = import.meta.env.DEV;
 
 async function setup() {
 
@@ -14,7 +17,8 @@ async function setup() {
   });
 
   document.body.appendChild(app.canvas);
-
+  
+  
   let sim = new ParticleSimulator(10000, 3, app.screen.width, app.screen.height)
   let ren = new Renderer(sim)
 
@@ -30,5 +34,18 @@ async function setup() {
   });
 }
 
+// --- Start Benchmarker ---
+let bench = new BenchmarkingTool(120)
 // --- Start the system ---
 setup();
+
+// Expose BenchmarkingTool to browser dev console
+declare global {
+  interface Window {
+    __bench: BenchmarkingTool;
+  }
+}
+if (BENCH_ENABLED) {
+  window.__bench = bench;
+  // then in browser console: __bench.startBenchmarkRun({ runs: 3 })
+}
