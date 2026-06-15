@@ -19,7 +19,7 @@ async function setup() {
   document.body.appendChild(app.canvas);
   
   
-  let sim = new ParticleSimulator(10000, 3, app.screen.width, app.screen.height)
+  let sim = new ParticleSimulator('test-seed', 10000, 3, app.screen.width, app.screen.height)
   let ren = new Renderer(sim)
 
   app.stage.addChild(ren.container)
@@ -38,6 +38,7 @@ async function setup() {
 let bench = new BenchmarkingTool(120)
 // --- Start the system ---
 setup();
+
 
 // Expose BenchmarkingTool to browser dev console
 declare global {

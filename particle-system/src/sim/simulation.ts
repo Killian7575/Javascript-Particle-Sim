@@ -10,6 +10,7 @@
 
 import { force } from '../core/rules.ts';
 //       ^ VALUE import (we call force() at runtime), so NOT `import type`.
+import { mulberry32 } from '../core/seededrng.ts';
 const BENCH_ENABLED = import.meta.env.DEV;
 
 export class ParticleSimulator {
@@ -40,6 +41,9 @@ export class ParticleSimulator {
   private cellCols = 0;
   private cellRows = 0;
 
+  // --- Seeded PRNG ---
+  private readonly random: () => number;
+
   // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
   count: number;
   numTypes: number;
@@ -55,7 +59,8 @@ export class ParticleSimulator {
   // The `!` tells TS "assigned before first use" (we call initRules in constructor).
   rules!: Float32Array;   // numTypes*numTypes, each in [-1, 1]
 
-  constructor(count: number, numTypes: number, width: number, height: number) {
+  constructor(seed: number | string, count: number, numTypes: number, width: number, height: number) {
+    this.random = mulberry32(seed)
 
     this.count = count;
     this.numTypes = numTypes;
@@ -109,7 +114,7 @@ export class ParticleSimulator {
     */
     this.rules = new Float32Array([ -0.7824554443359375, -0.5159652233123779, -0.7399479150772095, 0.7869302034378052, -0.7077521681785583, 0.7734294533729553, -0.9772785305976868, 0.8419510126113892, -0.7135220766067505 ])
     // for (let i = 0; i < this.rules.length; i++) { // randomiser for later
-    //   this.rules[i] = Math.random() * 2 - 1;
+    //   this.rules[i] = this.random() * 2 - 1;
     // }
     // console.log(this.rules) // a way to save cool rulesets
   }
@@ -118,9 +123,9 @@ export class ParticleSimulator {
   seed() {
 
     for (let i = 0; i < this.count; i++) {
-      this.posX[i] = Math.random() * this.width;
-      this.posY[i] = Math.random() * this.height;
-      this.type[i] = Math.floor(Math.random() * this.numTypes);
+      this.posX[i] = this.random() * this.width;
+      this.posY[i] = this.random() * this.height;
+      this.type[i] = Math.floor(this.random() * this.numTypes);
 
       this.velX[i] = 0;
       this.velY[i] = 0;
