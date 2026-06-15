@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { ParticleContainer, Particle, Texture } from 'pixi.js';
-import type { ParticleSimulator } from './simulation.ts';
+import type { ParticleSimulator } from './sim/simulation.ts';
 //     ^^^^ verbatimModuleSyntax (tsconfig.json:12) REQUIRES `type` here: we use
 //          ParticleSimulator only in annotations, never as a runtime value.
 

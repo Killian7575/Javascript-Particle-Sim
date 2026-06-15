@@ -1,7 +1,7 @@
-import { ParticleSimulator } from './simulation.js';
-import { Renderer } from './render.js';
+import { ParticleSimulator } from './sim/simulation.js';
+import { Renderer } from './render/render.js';
 import { Application, Ticker } from 'pixi.js';
-import { BenchmarkingTool } from './benchmark.js';
+import { BenchmarkingTool } from '../test/benchmark/benchmark.js';
 
 const BENCH_ENABLED = import.meta.env.DEV;
 

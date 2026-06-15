@@ -8,7 +8,7 @@
 // after update(); we never touch a Pixi object here.
 // =============================================================================
 
-import { force } from './rules.ts';
+import { force } from '../core/rules.ts';
 //       ^ VALUE import (we call force() at runtime), so NOT `import type`.
 const BENCH_ENABLED = import.meta.env.DEV;
 
