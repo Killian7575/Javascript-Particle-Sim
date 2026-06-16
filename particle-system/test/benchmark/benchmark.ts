@@ -26,7 +26,7 @@ interface Benchmark {
   frames: number;
   runs: number;
   warmup: number;
-  config: Config; // new Simulation(config) <- thats the config
+  fullConfig: FullConfig; 
   currentRun: number;
   currentFrame: number;
   allRuns: SingleRun[];
@@ -132,8 +132,7 @@ export class BenchmarkingTool {
 
   private benchmarkOneSim(config: Config, frames: number) {
     // not yet implemented
-    const { seed, particleCount, typeCount, simWidth, simHeight } = config;
-    const sim = new ParticleSimulator(seed, particleCount, typeCount, simWidth, simHeight);
+    const sim = new ParticleSimulator(config);
     const dt = 1;
     for (let i = 0; i < frames; i++) {
       sim.update(dt)
@@ -141,19 +140,18 @@ export class BenchmarkingTool {
 
   }
 
-  startBenchmarkRun({frames = 600, runs = 3, warmup = 60, config = { seed: 'benchmarking', particleCount: 10000, typeCount: 3, simWidth: 2000, simHeight: 2000 }}: 
-                    {frames?: number; runs?: number; warmup?: number; config?: Config;} = {}) {
+  startBenchmarkRun(frames: number, runs: number, warmup: number, 
+                    fullConfig: FullConfig, tick: () => void) {
     if (!BENCH_ENABLED) return;
     this._bm = {
-      frames, runs, warmup, config,
+      frames, runs, warmup, fullConfig,
       currentRun: 0,
       currentFrame: 0,
       allRuns: [],
       frameTimings: new Float64Array(frames),       // per-frame sim:frame for current run
       componentAvg: {}      // sum of component avgs across frames
     };
-    for (let i = 0; i < runs; i++) {
-      this.benchmarkOneSim(config, frames)
+    for (let i = 0; i < frames; i++) {
     }
   }
   report() {

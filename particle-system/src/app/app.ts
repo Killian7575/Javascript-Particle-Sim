@@ -17,15 +17,17 @@ export class AppController {
     // init default params
     simParams = {
         // rebuild on change
-        seed: Math.random(), // Future: may create a string library to pick/string constructor from for easier default reproducibility
-        count: 10000, 
-        numTypes: 3,
+        seed: Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
+        particleCount: 10000, 
+        typeCount: 3,
+        simWidth: window.innerWidth,
+        simHeight: window.innerHeight,
         // live, rebuild not needed
         speed: 0.1,
         rMax: 100,
         beta: 0.3,
         friction: 0.05,
-        rules: null as Float32Array | null
+        rules: null as Float64Array | null
     };
 
     private tickerInstance: ((ticker: Ticker) => void) | null = null
@@ -41,10 +43,21 @@ export class AppController {
         this.app.ticker.maxFPS = 60;
 
         if (BENCH_ENABLED) {
+            window.__app = this;
             this.bench = new BenchmarkingTool(120);
             window.__bench = this.bench;
-            window.__app = this;
+            window.__startBench =  this.startBench
+            
         }
+    }
+    private startBench(frames: number, runs: number, warmup: number, fullConfig: FullConfig) {
+        this.simParams = fullConfig
+        this.startFullConfigHeadlessSim(fullConfig)
+        this.applyLiveParams()
+        const tick = () => this.sim!.update(1) // fixed dt for reproducibility
+        this.bench!.startBenchmarkRun(
+            frames, runs, warmup, fullConfig, tick  
+        );
     }
 
     private applyLiveParams() {
@@ -59,11 +72,8 @@ export class AppController {
 
     startSim() {
         this.clearRunning() // clean up existing if any
-
-        this.sim = new ParticleSimulator(
-            this.simParams.seed, this.simParams.count, this.simParams.numTypes,
-            this.app.screen.width, this.app.screen.height
-        );
+        const config: Config = this.simParams
+        this.sim = new ParticleSimulator(config);
         this.simParams.rules = this.sim.rules
         this.applyLiveParams()
 
@@ -76,18 +86,14 @@ export class AppController {
         };
         this.app.ticker.add(this.tickerInstance);
     }
-    startHeadlessSim(config: Config) {
+
+    private startFullConfigHeadlessSim(fullConfig: FullConfig) {
         this.clearRunning()
 
-        const { seed, particleCount: count, typeCount: numTypes, simWidth: width, simHeight: height } = config
-
-        this.sim = new ParticleSimulator(
-            seed, count, numTypes,
-            width, height
-        );
-
-        return this.sim.update
+        this.sim = new ParticleSimulator(fullConfig);
+        this.sim = Object.assign(this.sim, fullConfig)
     }
+
     clearRunning() {
         if (this.tickerInstance) {
             this.app.ticker.remove(this.tickerInstance);
@@ -99,6 +105,7 @@ export class AppController {
         }
         this.sim = null;
     }
+
     pauseLoop() {
         this.app.ticker.stop();
     }

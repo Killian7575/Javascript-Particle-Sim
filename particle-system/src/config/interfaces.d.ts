@@ -7,3 +7,10 @@ interface Config {
   simWidth: number;
   simHeight: number;
 }
+interface FullConfig extends Config {
+  speed: number;
+  rMax: number;
+  beta: number;
+  friction: number;
+  rules: Float64Array;
+}
