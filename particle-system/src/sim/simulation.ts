@@ -45,38 +45,39 @@ export class ParticleSimulator {
   private readonly random: () => number;
 
   // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
-  count: number;
-  numTypes: number;
-  speed = 0.1;
+  particleCount: number;
+  typeCount: number;
+  speed = 0.1;         // universal force multiplier
   rMax = 100;          // interaction radius (== future CELL_SIZE at M5)
   beta = 0.3;          // fraction of rMax that is pure repulsion (M3)
   friction = 0.05;     // was targetFriction (main.ts:24)
-  width: number;       // integrator clamps to these; main passes app.screen.*
-  height: number;
+  simWidth: number;       // integrator clamps to these; main passes app.screen.*
+  simHeight: number;
 
   // Born at M2 — the rules MATRIX is state, so it lives here, on the sim.
   // rules[a * numTypes + b] answers "how does type a feel toward type b?"
   // The `!` tells TS "assigned before first use"/"dev says it cannot be null/undefined" (we call initRules in constructor). (was rules!: ...)
   rules: Float32Array;   // numTypes*numTypes, each in [-1, 1]
 
-  constructor(seed: number | string, count: number, numTypes: number, width: number, height: number) {
+  constructor(config: Config) {
+    const { seed, particleCount, typeCount, simWidth, simHeight } = config
     this.random = mulberry32(seed)
 
-    this.count = count;
-    this.numTypes = numTypes;
-    this.width = width;
-    this.height = height;
+    this.particleCount = particleCount;
+    this.typeCount = typeCount;
+    this.simWidth = simWidth;
+    this.simHeight = simHeight;
 
-    this.posX = new Float32Array(count);
-    this.posY = new Float32Array(count);
-    this.velX = new Float32Array(count);
-    this.velY = new Float32Array(count);
-    this.type = new Uint8Array(count);
+    this.posX = new Float32Array(particleCount);
+    this.posY = new Float32Array(particleCount);
+    this.velX = new Float32Array(particleCount);
+    this.velY = new Float32Array(particleCount);
+    this.type = new Uint8Array(particleCount);
 
-    this.accX = new Float32Array(count);
-    this.accY = new Float32Array(count);
+    this.accX = new Float32Array(particleCount);
+    this.accY = new Float32Array(particleCount);
 
-    this.rules = new Float32Array(numTypes * numTypes);
+    this.rules = new Float32Array(typeCount * typeCount);
     this.initRules();
     this.seed();
   }
@@ -122,10 +123,10 @@ export class ParticleSimulator {
   /** (Re)randomise positions and types in place; zero velocities. */
   seed() {
 
-    for (let i = 0; i < this.count; i++) {
-      this.posX[i] = this.random() * this.width;
-      this.posY[i] = this.random() * this.height;
-      this.type[i] = Math.floor(this.random() * this.numTypes);
+    for (let i = 0; i < this.particleCount; i++) {
+      this.posX[i] = this.random() * this.simWidth;
+      this.posY[i] = this.random() * this.simHeight;
+      this.type[i] = Math.floor(this.random() * this.typeCount);
 
       this.velX[i] = 0;
       this.velY[i] = 0;
@@ -139,7 +140,7 @@ export class ParticleSimulator {
    * in-range neighbour is within that block (max distance == one cell side).
    */
   private buildGrid(): void {
-    const { posX, posY, count, rMax, width, height } = this;
+    const { posX, posY, particleCount: count, rMax, simWidth: width, simHeight: height } = this;
     let { cellMap } = this;
 
     // TODO (you): Step 1 — compute this.cellCols and this.cellRows.
@@ -184,7 +185,7 @@ export class ParticleSimulator {
     //   const { posX, posY, velX, velY, accX, accY, count } = this; --- DONE
     // No Pixi here. main.ts calls renderer.sync(this) AFTER this returns.
 
-    const { posX, posY, velX, velY, accX, accY, count, type, rMax, beta, width, height, friction, rules, numTypes, speed } = this;
+    const { posX, posY, velX, velY, accX, accY, particleCount: count, type, rMax, beta, simWidth: width, simHeight: height, friction, rules, typeCount: numTypes, speed } = this;
 
     this.buildGrid();
     const { cellMap, cellCols, cellRows } = this;
