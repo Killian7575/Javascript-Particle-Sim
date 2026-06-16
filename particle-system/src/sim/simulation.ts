@@ -18,15 +18,15 @@ export class ParticleSimulator {
   // `readonly` = the buffer REFERENCE is fixed for this sim's lifetime (you still
   // mutate its elements freely). To change `count`, build a NEW ParticleSimulator
   // (see main.ts). Mental model: structural change -> new object; tuning -> set a field.
-  readonly posX: Float32Array;
-  readonly posY: Float32Array;
-  readonly velX: Float32Array;
-  readonly velY: Float32Array;
+  readonly posX: Float64Array;
+  readonly posY: Float64Array;
+  readonly velX: Float64Array;
+  readonly velY: Float64Array;
   readonly type: Uint8Array;            // particle type index 0..numTypes-1
 
   // --- reused force accumulators: allocate ONCE; `new` in a 60fps loop = GC stutter ---
-  private readonly accX: Float32Array;
-  private readonly accY: Float32Array;
+  private readonly accX: Float64Array;
+  private readonly accY: Float64Array;
 
   // --- performance ---
   private pStart: number[] = [];
@@ -57,7 +57,7 @@ export class ParticleSimulator {
   // Born at M2 — the rules MATRIX is state, so it lives here, on the sim.
   // rules[a * numTypes + b] answers "how does type a feel toward type b?"
   // The `!` tells TS "assigned before first use"/"dev says it cannot be null/undefined" (we call initRules in constructor). (was rules!: ...)
-  rules: Float32Array;   // numTypes*numTypes, each in [-1, 1]
+  rules: Float64Array;   // numTypes*numTypes, each in [-1, 1]
 
   constructor(config: Config) {
     const { seed, particleCount, typeCount, simWidth, simHeight } = config
@@ -68,16 +68,16 @@ export class ParticleSimulator {
     this.simWidth = simWidth;
     this.simHeight = simHeight;
 
-    this.posX = new Float32Array(particleCount);
-    this.posY = new Float32Array(particleCount);
-    this.velX = new Float32Array(particleCount);
-    this.velY = new Float32Array(particleCount);
+    this.posX = new Float64Array(particleCount);
+    this.posY = new Float64Array(particleCount);
+    this.velX = new Float64Array(particleCount);
+    this.velY = new Float64Array(particleCount);
     this.type = new Uint8Array(particleCount);
 
-    this.accX = new Float32Array(particleCount);
-    this.accY = new Float32Array(particleCount);
+    this.accX = new Float64Array(particleCount);
+    this.accY = new Float64Array(particleCount);
 
-    this.rules = new Float32Array(typeCount * typeCount);
+    this.rules = new Float64Array(typeCount * typeCount);
     this.initRules();
     this.seed();
   }
@@ -113,7 +113,7 @@ export class ParticleSimulator {
        OG rule set:
     1. [-0.05, 1, 1, 1, 0.75, 1, -0.5, -0.5, -0.5]
     */
-    this.rules = new Float32Array([ -0.7824554443359375, -0.5159652233123779, -0.7399479150772095, 0.7869302034378052, -0.7077521681785583, 0.7734294533729553, -0.9772785305976868, 0.8419510126113892, -0.7135220766067505 ])
+    this.rules = new Float64Array([ -0.7824554443359375, -0.5159652233123779, -0.7399479150772095, 0.7869302034378052, -0.7077521681785583, 0.7734294533729553, -0.9772785305976868, 0.8419510126113892, -0.7135220766067505 ])
     // for (let i = 0; i < this.rules.length; i++) { // randomiser for later
     //   this.rules[i] = this.random() * 2 - 1;
     // }
