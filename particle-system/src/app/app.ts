@@ -10,9 +10,9 @@ const BENCH_ENABLED = import.meta.env.DEV;
 
 export class AppController {
     app!:   Application; // assuring it is assigned before use with !, check first if errors
-    sim:    ParticleSimulator | null = null;
-    ren:    Renderer | null          = null;
-    bench:  BenchmarkingTool | null  = null;
+    sim:    ParticleSimulator | undefined = undefined;
+    ren:    Renderer | undefined          = undefined;
+    bench:  BenchmarkingTool | undefined  = undefined;
 
     // init default params
     simParams = {
@@ -27,10 +27,10 @@ export class AppController {
         rMax: 100,
         beta: 0.3,
         friction: 0.05,
-        rules: null as Float64Array | null
+        rules: undefined as Float64Array | undefined
     };
 
-    private tickerInstance: ((ticker: Ticker) => void) | null = null
+    private tickerInstance: ((ticker: Ticker) => void) | undefined = undefined
 
     async init() {
         this.app = new Application();
@@ -50,6 +50,7 @@ export class AppController {
             
         }
     }
+
     private startBench(frames: number, runs: number, warmup: number, fullConfig: FullConfig) {
         this.simParams = fullConfig
         this.startFullConfigHeadlessSim(fullConfig)
@@ -66,8 +67,15 @@ export class AppController {
         this.sim.rMax = this.simParams.rMax
         this.sim.beta = this.simParams.beta
         this.sim.friction = this.simParams.friction
-        console.assert((this.simParams.rules !== null), "Attempting to apply null value rules")
+        console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined value rules")
         this.sim.rules = this.simParams.rules!
+    }
+
+    private startFullConfigHeadlessSim(fullConfig: FullConfig) {
+        this.clearRunning()
+
+        this.sim = new ParticleSimulator(fullConfig);
+        this.sim = Object.assign(this.sim, fullConfig)
     }
 
     startSim() {
@@ -87,23 +95,16 @@ export class AppController {
         this.app.ticker.add(this.tickerInstance);
     }
 
-    private startFullConfigHeadlessSim(fullConfig: FullConfig) {
-        this.clearRunning()
-
-        this.sim = new ParticleSimulator(fullConfig);
-        this.sim = Object.assign(this.sim, fullConfig)
-    }
-
     clearRunning() {
         if (this.tickerInstance) {
             this.app.ticker.remove(this.tickerInstance);
-            this.tickerInstance = null;
+            this.tickerInstance = undefined;
         }
         if (this.ren) {
             this.app.stage.removeChild(this.ren.container);
-            this.ren = null;
+            this.ren = undefined;
         }
-        this.sim = null;
+        this.sim = undefined;
     }
 
     pauseLoop() {
