@@ -56,8 +56,8 @@ export class ParticleSimulator {
 
   // Born at M2 — the rules MATRIX is state, so it lives here, on the sim.
   // rules[a * numTypes + b] answers "how does type a feel toward type b?"
-  // The `!` tells TS "assigned before first use" (we call initRules in constructor).
-  rules!: Float32Array;   // numTypes*numTypes, each in [-1, 1]
+  // The `!` tells TS "assigned before first use"/"dev says it cannot be null/undefined" (we call initRules in constructor). (was rules!: ...)
+  rules: Float32Array;   // numTypes*numTypes, each in [-1, 1]
 
   constructor(seed: number | string, count: number, numTypes: number, width: number, height: number) {
     this.random = mulberry32(seed)

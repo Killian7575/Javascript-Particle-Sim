@@ -1,3 +1,4 @@
+import { ParticleSimulator } from "../../src/sim/simulation";
 const BENCH_ENABLED = import.meta.env.DEV;
 declare const __GIT_HASH__: string;
 
@@ -20,12 +21,6 @@ interface ComponentMetrics {
 interface SingleRun {
   frames: Float64Array;
   componentAverages: Record<string, ComponentMetrics>;
-}
-interface Config {
-  particleCount: number;
-  typeCount: number;
-  simWidth: number;
-  simHeight: number;
 }
 interface Benchmark {
   frames: number;
@@ -135,11 +130,18 @@ export class BenchmarkingTool {
     console.table(data.summary);  // also print the summary
   }
 
-  private benchmarkOneSim() {
+  private benchmarkOneSim(config: Config, frames: number) {
     // not yet implemented
+    const { seed, particleCount, typeCount, simWidth, simHeight } = config;
+    const sim = new ParticleSimulator(seed, particleCount, typeCount, simWidth, simHeight);
+    const dt = 1;
+    for (let i = 0; i < frames; i++) {
+      sim.update(dt)
+    }
+
   }
 
-  startBenchmarkRun({frames = 600, runs = 3, warmup = 60, config = { particleCount: 10000, typeCount: 3, simWidth: 2000, simHeight: 2000 }}: 
+  startBenchmarkRun({frames = 600, runs = 3, warmup = 60, config = { seed: 'benchmarking', particleCount: 10000, typeCount: 3, simWidth: 2000, simHeight: 2000 }}: 
                     {frames?: number; runs?: number; warmup?: number; config?: Config;} = {}) {
     if (!BENCH_ENABLED) return;
     this._bm = {
@@ -151,7 +153,7 @@ export class BenchmarkingTool {
       componentAvg: {}      // sum of component avgs across frames
     };
     for (let i = 0; i < runs; i++) {
-      this.benchmarkOneSim
+      this.benchmarkOneSim(config, frames)
     }
   }
   report() {
