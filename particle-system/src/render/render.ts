@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { ParticleContainer, Particle, Texture } from 'pixi.js';
-import type { ParticleSimulator } from './sim/simulation.ts';
+import type { ParticleSimulator } from '../sim/simulation';
 //     ^^^^ verbatimModuleSyntax (tsconfig.json:12) REQUIRES `type` here: we use
 //          ParticleSimulator only in annotations, never as a runtime value.
 
@@ -55,8 +55,8 @@ export class Renderer {
       },
       blendMode: 'add'
     });
-    this.palette = buildPalette(sim.numTypes)
-    for (let i = 0; i < sim.count; i++) {
+    this.palette = buildPalette(sim.typeCount)
+    for (let i = 0; i < sim.particleCount; i++) {
       const p = new Particle({
         texture: this.texture,
         x: sim.posX[i],
@@ -74,7 +74,7 @@ export class Renderer {
   sync(sim: ParticleSimulator) {
     // TODO (you): for i -> renderParticles[i].x = sim.posX[i]; .y = sim.posY[i];
     // NO container.update() here: position is dynamic (main.ts:59), synced to GPU automatically.
-    for (let i = 0; i < sim.count; i++) {
+    for (let i = 0; i < sim.particleCount; i++) {
       this.renderParticles[i].x = sim.posX[i];
       this.renderParticles[i].y = sim.posY[i];
     }
@@ -84,7 +84,7 @@ export class Renderer {
   refreshTints(sim: ParticleSimulator) {
     // TODO (you): for i -> renderParticles[i].tint = this.palette[sim.type[i]];
     //             THEN this.container.update();  (static change => must call update)
-    for (let i = 0; i < sim.count; i++) {
+    for (let i = 0; i < sim.particleCount; i++) {
       this.renderParticles[i].tint = this.palette[sim.type[i]]
     }
     this.container.update()
