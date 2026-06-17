@@ -12,7 +12,7 @@ declare const __GIT_HASH__: string;
 export interface SimProbe {
   /**
    * Start timing a named span
-   * @param name: The identifier string of the span
+   * @param name The identifier string of the span
    * Usage:
    *   probe.startSpan('sim:buildGrid');
    *   doWork();
@@ -21,7 +21,7 @@ export interface SimProbe {
   startSpan(name: string): void;
   /**
    * End timing a named span
-   * @param name: The identifier string of the span
+   * @param name The identifier string of the span
    * Usage:
    *   probe.startSpan('sim:buildGrid');
    *   doWork();
@@ -31,15 +31,15 @@ export interface SimProbe {
 
   /**
    * Accumulate a duration manually
-   * @param name: The identifier string
-   * @param ms: Duration in ms of span
+   * @param name The identifier string
+   * @param ms Duration in ms of span
    */
   accumDuration(name: string, ms: number): void;
 
   /**
    * Accumulate context value: a plain number with no timing semantics.
-   * @param name: The identifier string
-   * @param increment: A number increment for value
+   * @param name The identifier string
+   * @param increment A number increment for value
    * Usage:
    *  for (...) { probe.accumCount("cellsVisited", 1) }
    *  OR
@@ -178,7 +178,6 @@ export class BenchmarkingTool {
     createSim: (cfg: FullConfig, probe: SimProbe) => ParticleSimulator,
   ): void {
     if (!BENCH_ENABLED) return;
-
     const allRuns: SingleRun[] = [];
 
     for (let r = 0; r < runs; r++) {
