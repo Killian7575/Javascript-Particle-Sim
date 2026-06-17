@@ -6,6 +6,7 @@ declare global {
   interface Window {
     __bench: BenchmarkingTool;
     __app: AppController;
+    __startBench: any; // "any" while i develop/understand function
   }
 }
 

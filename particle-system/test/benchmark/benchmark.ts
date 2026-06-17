@@ -1,125 +1,307 @@
-import { ParticleSimulator } from "../../src/sim/simulation";
+import type { ParticleSimulator } from '../../src/sim/simulation';
+
 const BENCH_ENABLED = import.meta.env.DEV;
 declare const __GIT_HASH__: string;
 
-interface Pool {
-  buf: Float64Array;
-  head: number;
-  count: number;
+// ---------------------------------------------------------------------------
+// SimProbe — the ONLY interface simulation.ts needs to know about.
+// The sim calls these methods; benchmark.ts provides the real impl;
+// a no-op NullProbe is used in production so the sim imports nothing from here.
+// ---------------------------------------------------------------------------
+
+export interface SimProbe {
+  /**
+   * Start timing a named span
+   * @param name: The identifier string of the span
+   * Usage:
+   *   probe.startSpan('sim:buildGrid');
+   *   doWork();
+   *   probe.endSpan('sim:buildGrid');
+   */
+  startSpan(name: string): void;
+  /**
+   * End timing a named span
+   * @param name: The identifier string of the span
+   * Usage:
+   *   probe.startSpan('sim:buildGrid');
+   *   doWork();
+   *   probe.endSpan('sim:buildGrid');
+   */
+  endSpan(name: string): void;
+
+  /**
+   * Accumulate a duration manually
+   * @param name: The identifier string
+   * @param ms: Duration in ms of span
+   */
+  accumDuration(name: string, ms: number): void;
+
+  /**
+   * Accumulate context value: a plain number with no timing semantics.
+   * @param name: The identifier string
+   * @param increment: A number increment for value
+   * Usage:
+   *  for (...) { probe.accumCount("cellsVisited", 1) }
+   *  OR
+   *  probe.accumCount("cellVisited", cellMap.size)
+   */
+  accumCount(name: string, increment: number): void;
+
+  /**
+   * Commit frame accumulators
+   * Usage:
+   *  // After last probe use
+   *  probe.commitFrame()
+   */
+  commitFrame(): void
 }
-interface ConsoleOutput {
-  avg: number;
-  min: number;
-  max: number;
-  p95: number;
-  n: number;
-}
+
+// ---------------------------------------------------------------------------
+// Internal storage types
+// ---------------------------------------------------------------------------
+
 interface ComponentMetrics {
   avg: number;
+  p50: number;
   p95: number;
+  p99: number;
 }
+
 interface SingleRun {
-  frames: Float64Array;
-  componentAverages: Record<string, ComponentMetrics>;
+  /** Raw per-frame totals (ms), indexed by frame number. */
+  frames: number[];
+  /** Per-component timing metrics, keyed by span name. */
+  componentTimings: Record<string, ComponentMetrics>;
+  /** Per-component context values (counts etc.), keyed by name. */
+  componentCounts: Record<string, ComponentMetrics>;
 }
-interface Benchmark {
-  frames: number;
-  runs: number;
-  warmup: number;
-  fullConfig: FullConfig; 
-  currentRun: number;
-  currentFrame: number;
-  allRuns: SingleRun[];
-  frameTimings: Float64Array; // per-frame sim:frame for current run
-  componentAvg: Record<string, ComponentMetrics>; // sum of component avgs across frames 
-}
+
 interface BenchmarkRecord {
   meta: {
-    timestamp: Date;
+    timestamp: string;
     git: string;
-    config: Config;
+    config: FullConfig;
     runCount: number;
     framesPerRun: number;
-  },
+    warmupFrames: number;
+  };
   runs: SingleRun[];
   summary: {
-    frameAvg: number;
-    frameP95: number;
-    frameMax: number;
-    warmupFrames: number;
-    postWarmupAvg: number;
-  }
+    allFrames: ComponentMetrics;
+    postWarmupFrames: ComponentMetrics;
+  };
 }
 
-/* --- OUTPUT EXAMPLE ---
-{
-  "meta": {
-    "timestamp": "2024-01-15T14:32:00Z",
-    "git": "a3f9c12",
-    "config": { "particleCount": 500, "cellCols": 20 },
-    "runCount": 3,
-    "framesPerRun": 600
-  },
-  "runs": [
-    {
-      "frames": [1.2, 1.4, 1.3, 2.1, ...],  // sim:frame per frame, ms
-      "componentAvgs": {
-        "sim:buildGrid": { "avg": 0.12, "p95": 0.18 },
-        "sim:within":    { "avg": 0.84, "p95": 1.21 },
-        "sim:cross":     { "avg": 0.61, "p95": 0.94 },
-        "sim:cellCount": { "avg": 312 }
-      }
-    }
-  ],
-  "summary": {
-    "frameAvg":    1.81,
-    "frameP95":    3.12,
-    "frameMax":    4.40,
-    "warmupFrames": 60,   // excluded from summary stats
-    "postWarmupAvg": 1.94
-  }
-}
+/*
+  NAMING CONVENTION
+  'system:component' — e.g. 'sim:buildGrid', 'sim:within', 'sim:cross'
+  'system:frame'     — total frame time for that system
+  Counts follow the same convention: 'sim:cellsVisited'
 */
 
-export class BenchmarkingTool {
-  private _pools: Map<string, Pool> = new Map();
-  private _poolSize: number = 120;
-  private _obs: PerformanceObserver | undefined = undefined;
-  private _bm: Benchmark | undefined;
+// ---------------------------------------------------------------------------
+// LiveProbe — the real SimProbe used during a benchmark run
+// ---------------------------------------------------------------------------
 
-  constructor(poolSize = 120) {  // 120 = 2s at 60fps
-    this._pools = new Map();
-    this._poolSize = poolSize;
-    this._bm = undefined;
-    if (BENCH_ENABLED) this.initObserver();
+class LiveProbe implements SimProbe {
+  // span start times, keyed by the name passed to startSpan)
+  private _spans: Map<string, number> = new Map();
+  private _accumulateSpans: Map<string, number> = new Map();
+  private _accumulateCounts: Map<string, number> = new Map();
+
+  // accumulated data per name
+  _timings: Map<string, number[]> = new Map();
+  _counts:  Map<string, number[]> = new Map();
+
+  reset() {
+    this._spans.clear();
+    this._accumulateSpans.clear();
+    this._accumulateCounts.clear();
+    this._timings.clear();
+    this._counts.clear();
   }
 
-  private initObserver() {
-    this._obs = new PerformanceObserver(list => {
-      for (const entry of list.getEntries()) {
-        this.push(entry.name, entry.duration);
-      }
+  startSpan(name: string): void {
+    const t0 = performance.now();
+    this._spans.set(name, t0);
+  }
+
+  endSpan(name: string): void {
+    const t0 = this._spans.get(name);
+    if (!t0) return;
+    this.accumDuration(name, performance.now() - t0);
+    this._spans.delete(name);
+  }
+
+  accumDuration(name: string, ms: number): void {
+    let sum = this._accumulateSpans.get(name);
+    if (!sum) { sum = 0 }
+    sum += ms;
+    this._accumulateSpans.set(name, sum);
+  }
+
+  accumCount(name: string, increment: number): void {
+    let sum = this._accumulateCounts.get(name);
+    if (!sum) { sum = 0 }
+    sum += increment;
+    this._accumulateCounts.set(name, sum);
+  }
+
+  commitFrame(): void {
+    this._accumulateSpans.forEach((value, key) => {
+      let arr = this._timings.get(key);
+      if (!arr) { arr = []; this._timings.set(key, arr); }
+      arr.push(value);
     });
-    this._obs.observe({ type: 'measure', buffered: false });
+    this._accumulateCounts.forEach((value, key) => {
+      let arr = this._counts.get(key);
+      if (!arr) { arr = []; this._counts.set(key, arr); }
+      arr.push(value);
+    });
+    this._accumulateSpans.clear();
+    this._accumulateCounts.clear();
   }
+}
 
-  private push(name: string, value: number) {
-    let pool = this._pools.get(name);
-    if (!pool) {
-      pool = {
-        buf: new Float64Array(this._poolSize),
-        head: 0,
-        count: 0
+// ---------------------------------------------------------------------------
+// BenchmarkingTool
+// ---------------------------------------------------------------------------
+
+export class BenchmarkingTool {
+  private _probe = new LiveProbe();
+
+  benchmarkRun(
+    frames:  number,
+    runs:    number,
+    warmup:  number,
+    fullConfig: FullConfig,
+    createSim: (cfg: FullConfig, probe: SimProbe) => ParticleSimulator,
+  ): void {
+    if (!BENCH_ENABLED) return;
+
+    const allRuns: SingleRun[] = [];
+
+    for (let r = 0; r < runs; r++) {
+      this._probe.reset();
+      const sim = createSim(fullConfig, this._probe);
+
+      for (let f = 0; f < frames; f++) {
+        sim.update(1);  // fixed dt=1 for reproducibility
       }
-      //pool = { buf: new Float64Array(this._poolSize), head: 0, count: 0 };
-      this._pools.set(name, pool);
+
+      allRuns.push(this._buildSingleRun());
     }
-    pool.buf[pool.head] = value;
-    pool.head = (pool.head + 1) % this._poolSize;
-    if (pool.count < this._poolSize) pool.count++;
+
+    console.assert(allRuns.length === runs, 'Run count mismatch');
+
+    const record = this._buildRecord(frames, runs, warmup, fullConfig, allRuns);
+    this._save(record);
+    console.table(record.summary);
   }
 
-  private save(data: BenchmarkRecord) {
+  private _buildSingleRun(): SingleRun {
+    const timings: Record<string, ComponentMetrics> = {};
+    const counts:  Record<string, ComponentMetrics> = {};
+    let   frames:  number[] = [];
+
+    for (const [name, values] of this._probe._timings) {
+      const metrics = this._metrics(values);
+      if (name.endsWith(':frame')) {
+        frames = values;
+      } else {
+        timings[name] = metrics;
+      }
+    }
+    for (const [name, values] of this._probe._counts) {
+      counts[name] = this._metrics(values);
+    }
+
+    return { frames, componentTimings: timings, componentCounts: counts };
+  }
+
+  private _buildRecord(
+    frames: number,
+    runs: number,
+    warmup: number,
+    config: FullConfig,
+    allRuns: SingleRun[],
+  ): BenchmarkRecord {
+    const allFrameValues:         number[] = [];
+    const postWarmupFrameValues:  number[] = [];
+
+    for (const run of allRuns) {
+      allFrameValues.push(...run.frames);
+      postWarmupFrameValues.push(...run.frames.slice(warmup));
+    }
+
+    return {
+      meta: {
+        timestamp:      new Date().toISOString(),
+        git:            __GIT_HASH__,
+        config,
+        runCount:       runs,
+        framesPerRun:   frames,
+        warmupFrames:   warmup,
+      },
+      runs: allRuns,
+      summary: {
+        allFrames:        this._metrics(allFrameValues),
+        postWarmupFrames: this._metrics(postWarmupFrameValues),
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Live rolling-window report (used outside benchmark runs, e.g. from devtools)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Call update() each frame with the probe you pass into sim.update().
+   * This keeps the rolling window fresh without needing a PerformanceObserver.
+   * Usage (in app.ts ticker):
+   *   this.bench.frameUpdate(this.bench.probe);
+   */
+  report(): void {
+    if (!BENCH_ENABLED) return;
+
+    // Drain whatever the probe has accumulated so far
+    const out: Record<string, { avg: number; p95: number; p99: number; n: number }> = {};
+    for (const [name, values] of this._probe._timings) {
+      const m = this._metrics(values);
+      out[`⏱ ${name}`] = { avg: +m.avg.toFixed(3), p95: +m.p95.toFixed(3), p99: +m.p99.toFixed(3), n: values.length };
+    }
+    for (const [name, values] of this._probe._counts) {
+      const m = this._metrics(values);
+      out[`# ${name}`] = { avg: +m.avg.toFixed(1), p95: +m.p95.toFixed(1), p99: +m.p99.toFixed(1), n: values.length };
+    }
+    console.table(out);
+  }
+
+  /**
+   * Expose the probe so app.ts can pass it into sim.
+   * In prod, return undefined — use "optional chaining" where used, eg: probe?.spanStart("sim:frame")
+   */
+  get probe(): SimProbe | undefined {
+    return BENCH_ENABLED ? this._probe : undefined;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  private _metrics(values: number[]): ComponentMetrics {
+    if (values.length === 0) return { avg: 0, p50: 0, p95: 0, p99: 0 };
+    const sorted = [...values].sort((a, b) => a - b);
+    const avg = values.reduce((s, v) => s + v, 0) / values.length;
+    return {
+      avg,
+      p50: sorted[Math.floor(sorted.length * 0.50)],
+      p95: sorted[Math.floor(sorted.length * 0.95)],
+      p99: sorted[Math.floor(sorted.length * 0.99)],
+    };
+  }
+
+  private _save(data: BenchmarkRecord): void {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -127,68 +309,5 @@ export class BenchmarkingTool {
     a.download = `bench_${data.meta.git}_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    console.table(data.summary);  // also print the summary
-  }
-
-  private benchmarkOneSim(config: Config, frames: number) {
-    // not yet implemented
-    const sim = new ParticleSimulator(config);
-    const dt = 1;
-    for (let i = 0; i < frames; i++) {
-      sim.update(dt)
-    }
-
-  }
-
-  startBenchmarkRun(frames: number, runs: number, warmup: number, 
-                    fullConfig: FullConfig, tick: () => void) {
-    if (!BENCH_ENABLED) return;
-    this._bm = {
-      frames, runs, warmup, fullConfig,
-      currentRun: 0,
-      currentFrame: 0,
-      allRuns: [],
-      frameTimings: new Float64Array(frames),       // per-frame sim:frame for current run
-      componentAvg: {}      // sum of component avgs across frames
-    };
-    for (let i = 0; i < frames; i++) {
-    }
-  }
-  report() {
-    if (!BENCH_ENABLED) return;
-    const out: Record<string, ConsoleOutput> = {};
-    for (const [name, pool] of this._pools) {
-      const slice = pool.buf.subarray(0, pool.count);
-      const avg = slice.reduce((a, b) => a + b, 0) / pool.count;
-      const sorted = slice.slice().sort();
-      out[name] = {
-        avg:  +avg.toFixed(3),
-        min:  +sorted[0].toFixed(3),
-        max:  +sorted[pool.count - 1].toFixed(3),
-        p95:  +sorted[Math.floor(pool.count * 0.95)].toFixed(3),
-        n:    pool.count
-      };
-    }
-    console.table(out);
-  }
-
-  reset(name: string) {
-    if (name) this._pools.delete(name);
-    else      this._pools.clear();
   }
 }
-
-// Accumulators — module-level so sim.js can import them directly
-// In production these are dead code (ENABLED = false, all uses stripped)
-export let accumWithin = 0;
-export let accumCross  = 0;
-export let accumCells  = 0;
-
-export function resetAccumulators() {
-  accumWithin = 0;
-  accumCross  = 0;
-  accumCells  = 0;
-}
-
-export const bench = BENCH_ENABLED ? new BenchmarkingTool() : null;
-export { BENCH_ENABLED as BENCH_ENABLED };

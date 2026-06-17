@@ -6,5 +6,11 @@ const git   = hash + (dirty ? '-dirty' : '');
 export default {
   define: {
     __GIT_HASH__: JSON.stringify(git)
-  }
+  },
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy':   'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
 }
