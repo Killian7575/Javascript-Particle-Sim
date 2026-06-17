@@ -305,7 +305,7 @@ export class BenchmarkingTool {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `bench_${data.meta.git}_${Date.now()}.json`;
+    a.download = `bench_${data.meta.git}_${new Date().toISOString()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
