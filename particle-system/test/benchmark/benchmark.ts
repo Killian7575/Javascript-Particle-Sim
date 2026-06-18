@@ -14,18 +14,18 @@ export interface SimProbe {
    * Start timing a named span
    * @param name The identifier string of the span
    * Usage:
-   *   probe.startSpan('sim:buildGrid');
+   *   probe.startSpan('sim:update');
    *   doWork();
-   *   probe.endSpan('sim:buildGrid');
+   *   probe.endSpan('sim:update');
    */
   startSpan(name: string): void;
   /**
    * End timing a named span
    * @param name The identifier string of the span
    * Usage:
-   *   probe.startSpan('sim:buildGrid');
+   *   probe.startSpan('sim:update');
    *   doWork();
-   *   probe.endSpan('sim:buildGrid');
+   *   probe.endSpan('sim:update');
    */
   endSpan(name: string): void;
 
@@ -94,9 +94,8 @@ interface BenchmarkRecord {
 
 /*
   NAMING CONVENTION
-  'system:component' — e.g. 'sim:buildGrid', 'sim:within', 'sim:cross'
-  'system:frame'     — total frame time for that system
-  Counts follow the same convention: 'sim:cellsVisited'
+  'system:each:component:level' — e.g. 'sim:update' 'sim:update:buildGrid', 'sim:update:walk:within', 'sim:update:walk:cross'
+  Counts follow the same convention: 'sim:update:walk:cellsVisited'
 */
 
 // ---------------------------------------------------------------------------

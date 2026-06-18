@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# benchmarking
+bench_*.json
+*.py
+*.ipynb
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -116,11 +116,11 @@ export class ParticleSimulator {
       simWidth, simHeight,
       probe
     } = this;
-    probe?.startSpan("sim:frame")
+    probe?.startSpan("sim:update")
 
-    probe?.startSpan("sim:buildGrid");
+    probe?.startSpan("sim:update:buildGrid");
     this.buildGrid();
-    probe?.endSpan("sim:buildGrid")
+    probe?.endSpan("sim:update:buildGrid")
 
     const { cellMap, cellCols } = this;
 
@@ -192,26 +192,26 @@ export class ParticleSimulator {
     *   5: find new a..d positions
     *   6: repeat cellgrid.length times
     */
-    probe?.startSpan("sim:walk");
+    probe?.startSpan("sim:update:walk");
     const keys = cellMap.keys()
     for (const i of keys) {
       let selfBucket = cellMap.get(i) ?? [];
       let othersBucket = [i + 1, i - 1 + cellCols, i + cellCols, i + 1 + cellCols]
                          .flatMap(idx => cellMap.get(idx) ?? []);
 
-      probe?.startSpan("sim:within");
+      probe?.startSpan("sim:update:walk:within");
       processWithinBucket(selfBucket);
-      probe?.endSpan("sim:within");
+      probe?.endSpan("sim:update:walk:within");
 
-      probe?.startSpan("sim:cross");
+      probe?.startSpan("sim:update:walk:cross");
       process2ParticleBuckets(selfBucket, othersBucket);
-      probe?.endSpan("sim:cross");
+      probe?.endSpan("sim:update:walk:cross");
 
-      probe?.accumCount("sim:cellsVisited", 1);
+      probe?.accumCount("sim:update:walk:cellsVisited", 1);
     }
-    probe?.endSpan("sim:walk");
+    probe?.endSpan("sim:update:walk");
 
-    probe?.startSpan("sim:integrate")
+    probe?.startSpan("sim:update:integrate")
     // Apply forces to particles. Then apply boundary logic, then apply friction
     for (let i = 0; i < particleCount; i++) {
       // accumulate velocity
@@ -238,8 +238,8 @@ export class ParticleSimulator {
       velX[i] *= liveFriction;
       velY[i] *= liveFriction;
     }
-    probe?.endSpan("sim:integrate");
-    probe?.endSpan("sim:frame");
+    probe?.endSpan("sim:update:integrate");
+    probe?.endSpan("sim:update:frame");
     probe?.commitFrame();
   }
 }
