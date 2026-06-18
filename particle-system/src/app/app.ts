@@ -60,7 +60,7 @@ export class AppController {
 
     private _runBench(frames: number, runs: number, warmup: number, fullConfig: FullConfig) {
         if (!this.bench) return;
- 
+        const t0 = performance.now()
         // Pause the live render loop so it doesn't interfere with timing
         this.pauseLoop();
     
@@ -76,7 +76,20 @@ export class AppController {
                 return Object.assign(sim, cfg);
             },
         );
-    
+        const ms = performance.now() - t0
+        function deriveMinutesAndSeconds(ms: number): Number {
+            const minutes = ((ms / 1000) / 60) 
+            const remainderMin = minutes - Math.floor(minutes)
+            console.log(`min: ${minutes}, ms: ${ms}, rem: ${remainderMin}, floor: ${Math.floor(minutes)}`)
+            return (Math.floor(minutes) + (remainderMin * 0.6))
+        }
+        const minutesAndSeconds = deriveMinutesAndSeconds(ms)
+        const perRun = deriveMinutesAndSeconds(ms / runs);
+        const per1000Frames = deriveMinutesAndSeconds(ms * (1000 / (runs * frames)));
+        console.log("Benchmark Complete")
+        console.log(`Total Runtime: ${minutesAndSeconds.toFixed(2)} minutes.seconds, ${ms.toFixed(1)}ms`)
+        console.log(`Per Run: ${perRun.toFixed(2)} minutes.seconds`)
+        console.log(`Per 1000 frames: ${per1000Frames.toFixed(2)} minutes.seconds`)
         this.resumeLoop();
     }
 
