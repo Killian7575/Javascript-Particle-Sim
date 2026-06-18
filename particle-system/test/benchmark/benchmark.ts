@@ -202,9 +202,12 @@ export class BenchmarkingTool {
     const counts:  Record<string, ComponentMetrics> = {};
     let   frames:  number[] = [];
 
+    const rootKey = this._findRootKey(this._probe._timings)
+    console.info("rootKey: " + rootKey)
+
     for (const [name, values] of this._probe._timings) {
       const metrics = this._metrics(values);
-      if (name.endsWith(':frame')) {
+      if (name === rootKey) {
         frames = values;
       } else {
         timings[name] = metrics;
@@ -215,6 +218,12 @@ export class BenchmarkingTool {
     }
 
     return { frames, componentTimings: timings, componentCounts: counts };
+  }
+
+  private _findRootKey(map: Map<string, any>): string {
+    const countColons = (s: string) => (s.match(/:/g) ?? []).length;
+    const arr = Array.from(map.keys());
+    return arr.reduce((a, b) => countColons(a) <= countColons(b) ? a : b);
   }
 
   private _buildRecord(

@@ -80,7 +80,6 @@ export class AppController {
         function deriveMinutesAndSeconds(ms: number): Number {
             const minutes = ((ms / 1000) / 60) 
             const remainderMin = minutes - Math.floor(minutes)
-            console.log(`min: ${minutes}, ms: ${ms}, rem: ${remainderMin}, floor: ${Math.floor(minutes)}`)
             return (Math.floor(minutes) + (remainderMin * 0.6))
         }
         const minutesAndSeconds = deriveMinutesAndSeconds(ms)

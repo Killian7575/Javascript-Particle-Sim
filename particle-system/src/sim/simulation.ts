@@ -239,7 +239,7 @@ export class ParticleSimulator {
       velY[i] *= liveFriction;
     }
     probe?.endSpan("sim:update:integrate");
-    probe?.endSpan("sim:update:frame");
+    probe?.endSpan("sim:update");
     probe?.commitFrame();
   }
 }
