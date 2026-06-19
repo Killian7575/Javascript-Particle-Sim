@@ -32,7 +32,7 @@ export class AppController {
 
     private tickerInstance: ((ticker: Ticker) => void) | undefined = undefined;
 
-    private _probe: SimProbe | undefined = undefined;
+    private probe: SimProbe | undefined = undefined;
 
     async init() {
         this.app = new Application();
@@ -46,19 +46,19 @@ export class AppController {
 
         if (BENCH_ENABLED) {
             this.bench = new BenchmarkingTool();
-            this._probe = this.bench.probe;
+            this.probe = this.bench.getProbe;
 
             // Expose to browser devtools
             window.__app = this;
             window.__bench = this.bench;
             window.__startBench = (frames: number, runs: number, warmup: number, cfg: FullConfig) =>
-                this._runBench(frames, runs, warmup, cfg);
+                this.runBench(frames, runs, warmup, cfg);
 
             
         }
     }
 
-    private _runBench(frames: number, runs: number, warmup: number, fullConfig: FullConfig) {
+    private runBench(frames: number, runs: number, warmup: number, fullConfig: FullConfig) {
         if (!this.bench) return;
         const t0 = performance.now()
         // Pause the live render loop so it doesn't interfere with timing
@@ -106,7 +106,7 @@ export class AppController {
     startSim() {
         this.clearRunning()
         const config: Config = this.simParams
-        this.sim = new ParticleSimulator(config, this._probe);
+        this.sim = new ParticleSimulator(config, this.probe);
         this.simParams.rules = this.sim.rules
         this.applyLiveParams()
 
