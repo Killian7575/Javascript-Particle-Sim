@@ -10,7 +10,7 @@ export class Renderer {
 
   constructor(sim: ParticleSimulator) {
     this.texture = (() => {
-      const diameter = 8
+      const diameter = 4
       const radius = diameter/2
       const canvas = document.createElement('canvas');
       canvas.width = diameter;

@@ -15,11 +15,12 @@ export class AppController {
     ren:    Renderer          | undefined = undefined;
     bench:  BenchmarkingTool  | undefined = undefined;
 
+    densityAim = 600
     // init default params
     simParams = {
         // rebuild on change
         seed:           Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
-        particleCount:  10000, 
+        particleCount:  Math.floor(window.innerWidth * window.innerHeight / this.densityAim), 
         typeCount:      3,
         // live, rebuild not needed
         simWidth:       window.innerWidth,
@@ -41,13 +42,14 @@ export class AppController {
             width:           window.innerWidth,
             height:          window.innerHeight,
             backgroundColor: 0x111111,
+            resizeTo: window
         });
         document.body.appendChild(this.app.canvas);
         this.app.ticker.maxFPS = 60;
 
         if (BENCH_ENABLED) {
             this.bench = new BenchmarkingTool();
-            this.probe = this.bench.getProbe;
+            this.probe = undefined; /// TEMP CHANGE -------------------- CHANGE BACK AFTER
 
             // Expose to browser devtools
             window.__app = this;
@@ -141,7 +143,7 @@ export class AppController {
         this.clearRunning()
         const config: Config = this.simParams
         this.sim = new ParticleSimulator(config, this.probe);
-        this.simParams.rules = this.sim.rules
+        this.simParams.rules = this.sim.rules // TODO: unintentional rules variable reset to default every sim start
         this.applyLiveParams()
 
         this.ren = new Renderer(this.sim)

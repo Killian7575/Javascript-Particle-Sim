@@ -1,5 +1,6 @@
 import { BenchmarkingTool } from '../test/benchmark/benchmark.js';
 import { AppController } from './app/app.js';
+import { mountUI } from './ui/index.js';
 
 // Prepare to expose to browser dev console
 declare global {
@@ -12,5 +13,9 @@ declare global {
 
 const control = new AppController();
 await control.init()
-
 control.startSim()
+mountUI(control);
+
+// setTimeout(() => {
+//   control.pauseLoop()
+// }, 2000)

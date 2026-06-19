@@ -14,3 +14,4 @@ interface FullConfig extends Config {
   friction: number;
   rules: Float64Array;
 }
+type SimParameter = "all" | "simSize" | "speed" | "rMax" | "beta" | "friction" | "rules"
