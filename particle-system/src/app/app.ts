@@ -8,6 +8,7 @@ import { BenchmarkingTool, type SimProbe } from '../../test/benchmark/benchmark'
 
 const BENCH_ENABLED = import.meta.env.DEV;
 
+
 export class AppController {
     app!:   Application; 
     sim:    ParticleSimulator | undefined = undefined;
@@ -92,14 +93,47 @@ export class AppController {
         this.resumeLoop();
     }
 
-    private applyLiveParams() {
+    applyLiveParams(str: SimParameter = "all"): void {
         if (!this.sim) return;
-        this.sim.speed = this.simParams.speed
-        this.sim.rMax = this.simParams.rMax
-        this.sim.beta = this.simParams.beta
-        this.sim.friction = this.simParams.friction
-        console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
-        this.sim.rules = this.simParams.rules!
+        switch (str) {
+            case "simSize": {
+                this.sim.simWidth = this.simParams.simWidth
+                this.sim.simHeight = this.simParams.simHeight
+                break;
+            }
+            case "speed": {
+                this.sim.speed = this.simParams.speed
+                break;
+            }
+            case "rMax": {
+                this.sim.rMax = this.simParams.rMax
+                break;
+            }
+            case "beta": {
+                this.sim.beta = this.simParams.beta
+                break;
+            }
+            case "friction": {
+                this.sim.friction = this.simParams.friction
+                break;
+            }
+            case "rules": {
+                console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
+                this.sim.rules = this.simParams.rules!
+                break;
+            }
+            case "all": {
+                this.sim.simWidth = this.simParams.simWidth
+                this.sim.simHeight = this.simParams.simHeight
+                this.sim.speed = this.simParams.speed
+                this.sim.rMax = this.simParams.rMax
+                this.sim.beta = this.simParams.beta
+                this.sim.friction = this.simParams.friction
+                console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
+                this.sim.rules = this.simParams.rules!
+                break;
+            }
+        }
     }
 
 
