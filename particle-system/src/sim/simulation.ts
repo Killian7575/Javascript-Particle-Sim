@@ -178,6 +178,40 @@ export class ParticleSimulator {
         }
       }
     }
+    function borderRule(i: number, method: "wrap" | "bounce" = "wrap") {
+      switch (method) {
+        case "bounce": {
+          if (posX[i] > simWidth) {
+            posX[i] = simWidth;
+            velX[i] *= -1
+          } else if (posX[i] < 0) {
+            posX[i] = 0
+            velX[i] *= -1
+          }
+          if (posY[i] > simHeight) {
+            posY[i] = simHeight;
+            velY[i] *= -1
+          } else if (posY[i] < 0) {
+            posY[i] = 0
+            velY[i] *= -1
+          }
+          break;
+        }
+        case "wrap": {
+          if (posX[i] > simWidth) {
+            posX[i] -= simWidth;
+          } else if (posX[i] < 0) {
+            posX[i] += simWidth;
+          }
+          if (posY[i] > simHeight) {
+            posY[i] -= simHeight;
+          } else if (posY[i] < 0) {
+            posY[i] += simHeight;
+          }
+          break;
+        }
+      }
+    }
 
     // --------- SINGLE FRONT WALK ---------
     /*  x, x, x,    x = ignored grid cells
@@ -220,21 +254,9 @@ export class ParticleSimulator {
       // apply velocity to pos
       posX[i] += velX[i] * dt;
       posY[i] += velY[i] * dt;
-      // bounce off edge
-      if (posX[i] > simWidth) {
-        posX[i] = simWidth;
-        velX[i] *= -1
-      } else if (posX[i] < 0) {
-        posX[i] = 0
-        velX[i] *= -1
-      }
-      if (posY[i] > simHeight) {
-        posY[i] = simHeight;
-        velY[i] *= -1
-      } else if (posY[i] < 0) {
-        posY[i] = 0
-        velY[i] *= -1
-      }
+      // World edge handling
+      borderRule(i, "wrap")
+
       velX[i] *= liveFriction;
       velY[i] *= liveFriction;
     }
