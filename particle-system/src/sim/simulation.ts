@@ -178,9 +178,9 @@ export class ParticleSimulator {
         }
       }
     }
-    function borderRule(i: number, method: "wrap" | "bounce" = "wrap") {
+    function borderRule(i: number, method: "WRAP" | "BOUNCE" | "SNAP" = "WRAP") {
       switch (method) {
-        case "bounce": {
+        case "BOUNCE": {
           if (posX[i] > simWidth) {
             posX[i] = simWidth;
             velX[i] *= -1
@@ -197,7 +197,20 @@ export class ParticleSimulator {
           }
           break;
         }
-        case "wrap": {
+        case "SNAP":{
+          if (posX[i] > simWidth) {
+            posX[i] = simWidth;
+          } else if (posX[i] < 0) {
+            posX[i] = 0
+          }
+          if (posY[i] > simHeight) {
+            posY[i] = simHeight;
+          } else if (posY[i] < 0) {
+            posY[i] = 0
+          }
+          break;
+        }
+        case "WRAP": {
           if (posX[i] > simWidth) {
             posX[i] -= simWidth;
           } else if (posX[i] < 0) {
@@ -255,7 +268,7 @@ export class ParticleSimulator {
       posX[i] += velX[i] * dt;
       posY[i] += velY[i] * dt;
       // World edge handling
-      borderRule(i, "wrap")
+      borderRule(i)
 
       velX[i] *= liveFriction;
       velY[i] *= liveFriction;
