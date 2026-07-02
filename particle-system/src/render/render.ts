@@ -36,14 +36,14 @@ export class Renderer {
       blendMode: 'add'
     });
     this.palette = buildPalette(sim.typeCount)
-    for (let i = 0; i < sim.particleCount; i++) {
+    for (let i = 0, j = 0; i < sim.particleCount * sim.dim; i += sim.dim, j++) {
       const p = new Particle({
         texture: this.texture,
-        x: sim.posX[i],
-        y: sim.posY[i],
+        x: sim.posInterleaved[i],
+        y: sim.posInterleaved[i + 1],
         anchorX: 0.5,
         anchorY: 0.5,
-        tint: this.palette[sim.type[i]]
+        tint: this.palette[sim.type[j]]
       })
       this.renderParticles.push(p)
       this.container.addParticle(p)
@@ -52,9 +52,9 @@ export class Renderer {
 
   /** Per frame, after sim.update(): copy positions maths -> pixels. */
   sync(sim: ParticleSimulator) {
-    for (let i = 0; i < sim.particleCount; i++) {
-      this.renderParticles[i].x = sim.posX[i];
-      this.renderParticles[i].y = sim.posY[i];
+    for (let i = 0, p = 0; i < sim.particleCount * sim.dim; i += sim.dim, p++) {
+      this.renderParticles[p].x = sim.posInterleaved[i];
+      this.renderParticles[p].y = sim.posInterleaved[i + 1];
     }
   }
 

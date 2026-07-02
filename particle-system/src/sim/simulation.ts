@@ -7,22 +7,23 @@ import type { SimProbe } from '../../test/benchmark/benchmark.ts';
 
 
 export class ParticleSimulator {
-  // --- SoA state: particle i is (posX[i], posY[i], velX[i], velY[i], type[i]) ---
-  readonly posX: Float64Array<SharedArrayBuffer>;
-  readonly posY: Float64Array<SharedArrayBuffer>;
-  readonly velX: Float64Array<SharedArrayBuffer>;
-  readonly velY: Float64Array<SharedArrayBuffer>;
+  // --- SoA state ---
+  // --- Interleaved = [x0, y0, x1, y1, x2, y2, ...]
+  readonly posInterleaved: Float64Array<SharedArrayBuffer>;
+  readonly velInterleaved: Float64Array<SharedArrayBuffer>;
   readonly type: Uint8Array<SharedArrayBuffer>;
 
   // --- reused force accumulators ---
-  private readonly accumX: Float64Array<SharedArrayBuffer>;
-  private readonly accumY: Float64Array<SharedArrayBuffer>;
+  private readonly accumInterleaved: Float64Array<SharedArrayBuffer>;
 
   private cellMap: Map<number, number[]> = new Map();
   private cellCols = 0;
 
   // --- Seeded PRNG ---
   private readonly random: () => number;
+
+  // --- Space Dimensions ---
+  readonly dim = 2; // 2 = 2D
 
   // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
   particleCount: number;
@@ -39,6 +40,7 @@ export class ParticleSimulator {
   probe: SimProbe | undefined;
 
   constructor(config: Config, injectedProbe?: SimProbe ) {
+    
     const { seed, particleCount, typeCount, simWidth, simHeight } = config
     this.random = mulberry32(seed)
 
@@ -52,17 +54,22 @@ export class ParticleSimulator {
     this.simWidth = simWidth;
     this.simHeight = simHeight;
 
-    this.posX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    this.posY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    this.velX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    this.velY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    this.posInterleaved = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
+    this.velInterleaved = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
+    this.accumInterleaved = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
+
+    // this.posX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    // this.posY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    // this.velX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    // this.velY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
     this.type = new Uint8Array(new SharedArrayBuffer(bytesPerUInt8ArrayElement * particleCount));
 
-    this.accumX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    this.accumY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    // this.accumX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    // this.accumY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
 
     this.rules = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * typeCount * typeCount));
     this.initRules();
+    console.log("About to seed")
     this.seed();
   }
 
@@ -82,25 +89,30 @@ export class ParticleSimulator {
 
   /** (Re)randomise positions and types in place; zero velocities. */
   seed() {
-    for (let i = 0; i < this.particleCount; i++) {
-      this.posX[i] = this.random() * this.simWidth;
-      this.posY[i] = this.random() * this.simHeight;
-      this.type[i] = Math.floor(this.random() * this.typeCount);
-      this.velX[i] = 0;
-      this.velY[i] = 0;
+    const { 
+      particleCount, random, simWidth, simHeight, dim, typeCount,
+      posInterleaved, velInterleaved, type
+     } = this
+    console.log(particleCount)
+    for (let i = 0, p = 0; i < particleCount * dim; i += dim, p++) {
+      posInterleaved[i] = random() * simWidth;
+      posInterleaved[i + 1] = random() * simHeight;
+      type[p] = Math.floor(random() * typeCount);
+      velInterleaved[i] = 0;
+      velInterleaved[i + 1] = 0;
     }
   }
 
   private buildGrid(): void {
-    const { posX, posY, particleCount, rMax, simWidth } = this;
+    const { posInterleaved, particleCount, rMax, simWidth, dim } = this
 
     this.cellCols = Math.ceil(simWidth / rMax);
 
     this.cellMap.clear();
 
-    for (let i = 0; i < particleCount; i++){
-      const cx = Math.floor(posX[i] / rMax);
-      const cy = Math.floor(posY[i] / rMax);
+    for (let i = 0; i < particleCount * dim; i += dim){
+      const cx = Math.floor(posInterleaved[i] / rMax);
+      const cy = Math.floor(posInterleaved[i + 1] / rMax);
       const cellIndex = cx + cy * this.cellCols;
       const cell = this.cellMap.get(cellIndex)
       if (cell) { cell.push(i) } else { this.cellMap.set(cellIndex, [i]) }
@@ -114,9 +126,8 @@ export class ParticleSimulator {
   update(dt: number): void {
     
     const { 
-      posX, posY, velX, velY, type,
-      accumX, accumY, 
-      particleCount, typeCount,
+      posInterleaved, velInterleaved, accumInterleaved, type,
+      particleCount, typeCount, dim,
       rMax, beta, friction, rules, speed,
       simWidth, simHeight,
       probe
@@ -129,37 +140,44 @@ export class ParticleSimulator {
 
     const { cellMap, cellCols } = this;
 
-    accumX.fill(0);
-    accumY.fill(0);
+    accumInterleaved.fill(0);
 
     const liveFriction = Math.pow(friction, dt / 60);
 
     function processPair(pi: number, pj: number): void {
-      const dx = posX[pj] - posX[pi];
-      const dy = posY[pj] - posY[pi];
+      // const dx = posX[pj] - posX[pi];
+      // const dy = posY[pj] - posY[pi];
+      const dx = posInterleaved[pj] - posInterleaved[pi];
+      const dy = posInterleaved[pj + 1] - posInterleaved[pi + 1]
+
+      const ti = pi / dim;  // particle index for pi
+      const tj = pj / dim;  // particle index for pj
+      
+      // Affinity coefficient.
+      const a: number = rules[type[ti] * typeCount + type[tj]];
+      // Zero coefficient guard
+      if (a === 0) return;
       // Zero magnitude guard
       if (dx === 0 && dy === 0) return;
-      // Too far away to matter
+      // Distance Guard
       if (dx * dx + dy * dy > rMax * rMax) return;
       // Compute magnitude, named as distance
       const distance = Math.sqrt(dx ** 2 + dy ** 2);
       // Compute normalised vector
       const nx = dx / distance;
       const ny = dy / distance;
-      // Affinity coefficient.
-      const a: number = rules[type[pi] * typeCount + type[pj]]
       // Compute force
       const f = force(distance, a, rMax, beta);
       // Accumulate 
-      accumX[pi] += f * nx * speed;
-      accumY[pi] += f * ny * speed; 
+      accumInterleaved[pi] += f * nx * speed;
+      accumInterleaved[pi + 1] += f * ny * speed; 
 
       // Again but j affected by i
-      const a2: number = rules[type[pj] * typeCount + type[pi]]
+      const a2: number = rules[type[tj] * typeCount + type[ti]]
       const f2 = force(distance, a2, rMax, beta);
       // Accumulate 
-      accumX[pj] += f2 * -nx * speed;
-      accumY[pj] += f2 * -ny * speed;
+      accumInterleaved[pj] += f2 * -nx * speed;
+      accumInterleaved[pj + 1] += f2 * -ny * speed;
     }
 
     // Process all interaction between 2 groups
@@ -183,48 +201,48 @@ export class ParticleSimulator {
         }
       }
     }
-    function borderRule(i: number, method: "WRAP" | "BOUNCE" | "SNAP" = "WRAP") {
+    function borderRule(i: number, method: "WRAP" | "BOUNCE" | "SNAP" = "BOUNCE") {
       switch (method) {
         case "BOUNCE": {
-          if (posX[i] > simWidth) {
-            posX[i] = simWidth;
-            velX[i] *= -1
-          } else if (posX[i] < 0) {
-            posX[i] = 0
-            velX[i] *= -1
+          if (posInterleaved[i] > simWidth) {
+            posInterleaved[i] = simWidth;
+            velInterleaved[i] *= -1
+          } else if (posInterleaved[i] < 0) {
+            posInterleaved[i] = 0
+            velInterleaved[i] *= -1
           }
-          if (posY[i] > simHeight) {
-            posY[i] = simHeight;
-            velY[i] *= -1
-          } else if (posY[i] < 0) {
-            posY[i] = 0
-            velY[i] *= -1
+          if (posInterleaved[i + 1] > simHeight) {
+            posInterleaved[i + 1] = simHeight;
+            velInterleaved[i + 1] *= -1
+          } else if (posInterleaved[i + 1] < 0) {
+            posInterleaved[i + 1] = 0
+            velInterleaved[i + 1] *= -1
           }
           break;
         }
         case "SNAP":{
-          if (posX[i] > simWidth) {
-            posX[i] = simWidth;
-          } else if (posX[i] < 0) {
-            posX[i] = 0
+          if (posInterleaved[i] > simWidth) {
+            posInterleaved[i] = simWidth;
+          } else if (posInterleaved[i] < 0) {
+            posInterleaved[i] = 0
           }
-          if (posY[i] > simHeight) {
-            posY[i] = simHeight;
-          } else if (posY[i] < 0) {
-            posY[i] = 0
+          if (posInterleaved[i + 1] > simHeight) {
+            posInterleaved[i + 1] = simHeight;
+          } else if (posInterleaved[i + 1] < 0) {
+            posInterleaved[i + 1] = 0
           }
           break;
         }
         case "WRAP": {
-          if (posX[i] > simWidth) {
-            posX[i] -= simWidth;
-          } else if (posX[i] < 0) {
-            posX[i] += simWidth;
+          if (posInterleaved[i] > simWidth) {
+            posInterleaved[i] -= simWidth;
+          } else if (posInterleaved[i] < 0) {
+            posInterleaved[i] += simWidth
           }
-          if (posY[i] > simHeight) {
-            posY[i] -= simHeight;
-          } else if (posY[i] < 0) {
-            posY[i] += simHeight;
+          if (posInterleaved[i + 1] > simHeight) {
+            posInterleaved[i + 1] -= simHeight;
+          } else if (posInterleaved[i + 1] < 0) {
+            posInterleaved[i + 1] += simHeight
           }
           break;
         }
@@ -265,18 +283,18 @@ export class ParticleSimulator {
 
     probe?.startSpan("sim:update:integrate")
     // Apply forces to particles. Then apply boundary logic, then apply friction
-    for (let i = 0; i < particleCount; i++) {
+    for (let i = 0; i < particleCount * dim; i += dim) {
       // accumulate velocity
-      velX[i] += accumX[i] * dt;
-      velY[i] += accumY[i] * dt;
+      velInterleaved[i] += accumInterleaved[i] * dt;
+      velInterleaved[i + 1] += accumInterleaved[i + 1] * dt;
       // apply velocity to pos
-      posX[i] += velX[i] * dt;
-      posY[i] += velY[i] * dt;
+      posInterleaved[i] += velInterleaved[i] * dt;
+      posInterleaved[i + 1] += velInterleaved[i + 1] * dt;
       // World edge handling
       borderRule(i)
 
-      velX[i] *= liveFriction;
-      velY[i] *= liveFriction;
+      velInterleaved[i] *= liveFriction;
+      velInterleaved[i + 1] *= liveFriction;
     }
     probe?.endSpan("sim:update:integrate");
     probe?.endSpan("sim:update");

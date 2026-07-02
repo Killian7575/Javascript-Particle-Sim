@@ -23,8 +23,8 @@ export class AppController {
         particleCount:  Math.floor(window.innerWidth * window.innerHeight / this.densityAim), 
         typeCount:      3,
         // live, rebuild not needed
-        simWidth:       window.innerWidth,
-        simHeight:      window.innerHeight,
+        simWidth:       window.innerWidth - 100,
+        simHeight:      window.innerHeight - 100,
         speed:          0.1,
         rMax:           100,
         beta:           0.3,
@@ -56,8 +56,6 @@ export class AppController {
             window.__bench = this.bench;
             window.__startBench = (frames: number, runs: number, warmup: number, cfg: FullConfig) =>
                 this.runBench(frames, runs, warmup, cfg);
-
-            
         }
     }
 
@@ -98,7 +96,7 @@ export class AppController {
     applyLiveParams(str: SimParameter = "all"): void {
         if (!this.sim) return;
         switch (str) {
-            case "simSize": {
+            case "simSize": { // TODO: Move to restart only param
                 this.sim.simWidth = this.simParams.simWidth
                 this.sim.simHeight = this.simParams.simHeight
                 break;
@@ -121,7 +119,7 @@ export class AppController {
             }
             case "rules": {
                 console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
-                this.sim.rules = this.simParams.rules!
+                this.sim.rules.set(this.simParams.rules!)
                 break;
             }
             case "all": {
@@ -132,7 +130,7 @@ export class AppController {
                 this.sim.beta = this.simParams.beta
                 this.sim.friction = this.simParams.friction
                 console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
-                this.sim.rules = this.simParams.rules!
+                this.sim.rules.set(this.simParams.rules!)
                 break;
             }
         }
