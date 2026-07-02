@@ -8,15 +8,15 @@ import type { SimProbe } from '../../test/benchmark/benchmark.ts';
 
 export class ParticleSimulator {
   // --- SoA state: particle i is (posX[i], posY[i], velX[i], velY[i], type[i]) ---
-  readonly posX: Float64Array;
-  readonly posY: Float64Array;
-  readonly velX: Float64Array;
-  readonly velY: Float64Array;
-  readonly type: Uint8Array;
+  readonly posX: Float64Array<SharedArrayBuffer>;
+  readonly posY: Float64Array<SharedArrayBuffer>;
+  readonly velX: Float64Array<SharedArrayBuffer>;
+  readonly velY: Float64Array<SharedArrayBuffer>;
+  readonly type: Uint8Array<SharedArrayBuffer>;
 
   // --- reused force accumulators ---
-  private readonly accumX: Float64Array;
-  private readonly accumY: Float64Array;
+  private readonly accumX: Float64Array<SharedArrayBuffer>;
+  private readonly accumY: Float64Array<SharedArrayBuffer>;
 
   private cellMap: Map<number, number[]> = new Map();
   private cellCols = 0;
@@ -33,7 +33,7 @@ export class ParticleSimulator {
   friction = 0.05;     // Represents remaining velocity after 1 second of friction
   simWidth: number;       
   simHeight: number;
-  rules: Float64Array;   // numTypes*numTypes, each in [-1, 1]
+  rules: Float64Array<SharedArrayBuffer>;   // typeCount*typeCount, each in [-1, 1]
 
   // --- Benchmarking Probe ---
   probe: SimProbe | undefined;
@@ -44,21 +44,24 @@ export class ParticleSimulator {
 
     this.probe = injectedProbe;
 
+    const bytesPerFloat64ArrayElement = Float64Array.BYTES_PER_ELEMENT;
+    const bytesPerUInt8ArrayElement = Uint8Array.BYTES_PER_ELEMENT;
+
     this.particleCount = particleCount;
     this.typeCount = typeCount;
     this.simWidth = simWidth;
     this.simHeight = simHeight;
 
-    this.posX = new Float64Array(particleCount);
-    this.posY = new Float64Array(particleCount);
-    this.velX = new Float64Array(particleCount);
-    this.velY = new Float64Array(particleCount);
-    this.type = new Uint8Array(particleCount);
+    this.posX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    this.posY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    this.velX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    this.velY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    this.type = new Uint8Array(new SharedArrayBuffer(bytesPerUInt8ArrayElement * particleCount));
 
-    this.accumX = new Float64Array(particleCount);
-    this.accumY = new Float64Array(particleCount);
+    this.accumX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
+    this.accumY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
 
-    this.rules = new Float64Array(typeCount * typeCount);
+    this.rules = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * typeCount * typeCount));
     this.initRules();
     this.seed();
   }
@@ -68,11 +71,13 @@ export class ParticleSimulator {
        OG rule set:
     1. [-0.05, 1, 1, 1, 0.75, 1, -0.5, -0.5, -0.5]
     */
-    this.rules = new Float64Array([
+    const defaultRules = [
       -0.7824554443359375, -0.5159652233123779, -0.7399479150772095,
        0.7869302034378052, -0.7077521681785583,  0.7734294533729553,
       -0.9772785305976868,  0.8419510126113892, -0.7135220766067505 
-    ]);
+    ]
+    console.assert(defaultRules.length === this.rules.length && this.typeCount === 3)
+    this.rules.set(defaultRules);
   }
 
   /** (Re)randomise positions and types in place; zero velocities. */
