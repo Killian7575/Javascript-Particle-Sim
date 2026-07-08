@@ -1,23 +1,32 @@
-import { force } from '../core/rules.ts';
+// import { force } from '../core/rules.ts';
 import { mulberry32 } from '../core/seededrng.ts';
+import { getBufferSpec, createPartitioner } from './spatialPartition/PartitionModules.ts';
 
 // SimProbe is a tiny interface defined in benchmark.ts.
 // In production, app.ts passes nothing; in dev, it passes bench.probe
 import type { SimProbe } from '../../test/benchmark/benchmark.ts';
+const workerUrl = new URL('./workers/worker.js', import.meta.url)
 
 
 export class ParticleSimulator {
-  // --- SoA state ---
+  // --- SoA State ---
   // --- Interleaved = [x0, y0, x1, y1, x2, y2, ...]
-  readonly posInterleaved: Float64Array<SharedArrayBuffer>;
+  readonly posBuffers: [Float64Array<SharedArrayBuffer>, Float64Array<SharedArrayBuffer>]
   readonly velInterleaved: Float64Array<SharedArrayBuffer>;
   readonly type: Uint8Array<SharedArrayBuffer>;
+  readonly typeRMax: Float64Array<SharedArrayBuffer>;
+  readonly typeBeta: Float64Array<SharedArrayBuffer>;
+  readonly rules: Float64Array<SharedArrayBuffer>;
+  readonly liveParams: Float64Array<SharedArrayBuffer>;
 
-  // --- reused force accumulators ---
+  private requestedBuffers: Record<string, SharedArrayBuffer>;
+  private spatialModuleName: SpatialModuleName;
+  private spatialModule: SpatialPartitionClass;
+
+  currentPositions: Float64Array<SharedArrayBuffer>;
+
+  // --- Reused Force Accumulators ---
   private readonly accumInterleaved: Float64Array<SharedArrayBuffer>;
-
-  private cellMap: Map<number, number[]> = new Map();
-  private cellCols = 0;
 
   // --- Seeded PRNG ---
   private readonly random: () => number;
@@ -25,23 +34,40 @@ export class ParticleSimulator {
   // --- Space Dimensions ---
   readonly dim = 2; // 2 = 2D
 
-  // --- counts + tunables (lil-gui binds straight to these fields at M6) ---
-  particleCount: number;
-  typeCount: number;
-  speed = 0.1;         // universal force multiplier
-  rMax = 100;          // interaction radius (== future CELL_SIZE at M5)
-  beta = 0.3;          // fraction of rMax that is pure repulsion
-  friction = 0.05;     // Represents remaining velocity after 1 second of friction
-  simWidth: number;       
-  simHeight: number;
-  rules: Float64Array<SharedArrayBuffer>;   // typeCount*typeCount, each in [-1, 1]
+  // --- Workers + Controls ---
+  private readonly workerPool: Worker[] = [];
+  private readyCount = 0;
+  private readonly readyPromise: Promise<void>;
+  private readyResolve!: (value?: void | PromiseLike<void>) => void;
+  private readonly MODES: WorkerBoundaryModes = { WRAP: 0, BOUNCE: 1, SNAP: 2 };
+  private readonly CTRL: WorkerControls = { FRAME: 0, COUNTER: 1, STATUS: 2 };
+  private readonly STATUS: WorkerStatus = { RUNNING: 0, COMPLETE: 1, TERMINATED: 2 };
+  private readonly PARAMS: WorkerLiveParams = { DT: 0, SPEED: 1, FRICTION: 2, BOUNDARY: 3 };
+  private readonly POSIDX: WorkerReadWrite = { READ: 0, WRITE: 1 };
+  private readonly controlSignal: Int32Array<SharedArrayBuffer>;
+  private readonly posRW: Uint8Array<SharedArrayBuffer>;
+
+  // --- counts + tunables ---
+  readonly particleCount: number;
+  readonly typeCount: number;
+  speedLive = 0.1;         // universal force multiplier
+  frictionLive = 0.05;     // Represents remaining velocity after 1 second of friction
+  rMaxLive: number[];          // interaction radius (== future CELL_SIZE at M5)
+  betaLive: number[];          // fraction of rMax that is pure repulsion
+  readonly simWidth: number;       
+  readonly simHeight: number;
+  rulesLive: number[];   // typeCount*typeCount, each in [-1, 1]
+  boundaryModeLive: BoundaryMode = "BOUNCE"
+
+  NEW_CHANGE: boolean = false;
+
 
   // --- Benchmarking Probe ---
   probe: SimProbe | undefined;
 
-  constructor(config: Config, injectedProbe?: SimProbe ) {
-    
-    const { seed, particleCount, typeCount, simWidth, simHeight } = config
+  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe ) {
+    const { seed, particleCount, typeCount, simWidth, simHeight,  } = config
+    console.info(`Particle count is: ${particleCount}`);
     this.random = mulberry32(seed)
 
     this.probe = injectedProbe;
@@ -54,249 +80,238 @@ export class ParticleSimulator {
     this.simWidth = simWidth;
     this.simHeight = simHeight;
 
-    this.posInterleaved = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
+    const posBuffer0 = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
+    const posBuffer1 = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
+    this.posBuffers = [posBuffer0, posBuffer1];
     this.velInterleaved = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
     this.accumInterleaved = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
 
-    // this.posX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    // this.posY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    // this.velX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    // this.velY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
     this.type = new Uint8Array(new SharedArrayBuffer(bytesPerUInt8ArrayElement * particleCount));
-
-    // this.accumX = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-    // this.accumY = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount));
-
+    this.typeRMax = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * typeCount));
+    this.typeBeta = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * typeCount));
     this.rules = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * typeCount * typeCount));
-    this.initRules();
-    console.log("About to seed")
+
+    this.liveParams = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * Object.keys(this.PARAMS).length))
+    this.controlSignal = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * Object.keys(this.CTRL).length))
+    this.posRW = new Uint8Array(new SharedArrayBuffer(bytesPerUInt8ArrayElement * Object.keys(this.POSIDX).length));
+    this.spatialModuleName = spatialModuleName;
+
+    
+    this.posRW[this.POSIDX.READ] = this.controlSignal[this.CTRL.FRAME] & 1;
+    this.posRW[this.POSIDX.WRITE] = this.controlSignal[this.CTRL.FRAME] ^ 1;
+    
+    this.requestedBuffers = {};
+    for (const { name, byteLength } of getBufferSpec(spatialModuleName, {
+      simWidth: simWidth,
+      simHeight: simHeight,
+      particleCount: particleCount
+    })) {
+      this.requestedBuffers[name] = new SharedArrayBuffer(byteLength)
+    }
+    this.spatialModule = createPartitioner(spatialModuleName, {
+      simWidth: simWidth,
+      simHeight: simHeight,
+      particleCount: particleCount,
+      dimension: this.dim,
+      positions: this.posBuffers[this.posRW[this.POSIDX.READ]],
+      requestedBuffers: this.requestedBuffers
+    })
+
+    this.speedLive = 0.1;
+    this.frictionLive = 0.05;
+    this.rMaxLive = Array(typeCount).fill(100);
+    this.betaLive = Array(typeCount).fill(0.3);
+    this.rulesLive = Array(typeCount * typeCount);
+
+    
+    this.randomRules()
+    
+    this.initBufferParams()
+    
     this.seed();
+    this.currentPositions = this.posBuffers[0]
+    console.info("hardwareConcurrency = " + navigator.hardwareConcurrency)
+    this.readyPromise = new Promise((resolve) => {
+      this.readyResolve = resolve; 
+    });
+    this.initWorkerPool(navigator.hardwareConcurrency);
   }
 
-  initRules() {
-    /* Cool rule sets:    
-       OG rule set:
-    1. [-0.05, 1, 1, 1, 0.75, 1, -0.5, -0.5, -0.5]
-    */
-    const defaultRules = [
-      -0.7824554443359375, -0.5159652233123779, -0.7399479150772095,
-       0.7869302034378052, -0.7077521681785583,  0.7734294533729553,
-      -0.9772785305976868,  0.8419510126113892, -0.7135220766067505 
-    ]
-    console.assert(defaultRules.length === this.rules.length && this.typeCount === 3)
-    this.rules.set(defaultRules);
+  private initBufferParams() {
+    const { PARAMS, MODES } = this
+    this.liveParams[PARAMS.SPEED] = this.speedLive;
+    this.liveParams[PARAMS.BOUNDARY] = MODES[this.boundaryModeLive];
+    this.typeRMax.set(this.rMaxLive);
+    this.typeBeta.set(this.betaLive);
+    this.rules.set(this.rulesLive);
+  }
+  randomRules() {
+    const { random, typeCount } = this;
+    let rulesArr: number[] = [];
+    for (let i = 0; i < typeCount * typeCount; i++) {
+      rulesArr.push((random() * 2) - 1)
+    }
+    this.rulesLive = rulesArr;
   }
 
   /** (Re)randomise positions and types in place; zero velocities. */
   seed() {
     const { 
       particleCount, random, simWidth, simHeight, dim, typeCount,
-      posInterleaved, velInterleaved, type
+      posBuffers, velInterleaved, type
      } = this
+     const pos = posBuffers[this.posRW[this.POSIDX.READ]];
     console.log(particleCount)
     for (let i = 0, p = 0; i < particleCount * dim; i += dim, p++) {
-      posInterleaved[i] = random() * simWidth;
-      posInterleaved[i + 1] = random() * simHeight;
+      pos[i] = random() * simWidth;
+      pos[i + 1] = random() * simHeight;
       type[p] = Math.floor(random() * typeCount);
       velInterleaved[i] = 0;
       velInterleaved[i + 1] = 0;
     }
+    posBuffers[this.posRW[this.POSIDX.WRITE]].set(posBuffers[this.posRW[this.POSIDX.READ]])
   }
 
-  private buildGrid(): void {
-    const { posInterleaved, particleCount, rMax, simWidth, dim } = this
+  private initWorkerPool(size: number): void {
+    const { workerPool } = this
+    const buffers = {
+      posBuffers: this.posBuffers,
+      posRW: this.posRW,
+      velInterleaved: this.velInterleaved,
+      accumInterleaved: this.accumInterleaved,
+      type: this.type,
+      rules: this.rules,
+      typeRMax: this.typeRMax,
+      typeBeta: this.typeBeta,
+      liveParams: this.liveParams,
+      requestedBuffers: this.requestedBuffers
+    } as SimSharedBuffers
+    const config = {
+      workerInfo: {
+        controlSignal: this.controlSignal,
+        CTRL: this.CTRL,
+      },
+      simInfo: {
+        particleCount: this.particleCount,
+        typeCount: this.typeCount,
+        simWidth: this.simWidth,
+        simHeight: this.simHeight,
+        dimension: this.dim,
+        spatialModuleName: this.spatialModuleName,
+        PARAMS: this.PARAMS,
+        MODES: this.MODES,
+        POSIDX: this.POSIDX,
+      },
+      buffers
+    } as WorkerConfig
 
-    this.cellCols = Math.ceil(simWidth / rMax);
+    for (let i = 0; i < size; i++) {
+      config.workerInfo.workerId = i;
+      config.workerInfo.workerSlice = this.calcWorkerSlice(i, size);
+      const worker: Worker = new Worker(workerUrl, { type: "module" });
+      worker.onmessage = (e) => {this.onWorkerMessage(e)};
+      worker.onerror = (e) => { console.error(e) };
+      worker.postMessage(config);
 
-    this.cellMap.clear();
-
-    for (let i = 0; i < particleCount * dim; i += dim){
-      const cx = Math.floor(posInterleaved[i] / rMax);
-      const cy = Math.floor(posInterleaved[i + 1] / rMax);
-      const cellIndex = cx + cy * this.cellCols;
-      const cell = this.cellMap.get(cellIndex)
-      if (cell) { cell.push(i) } else { this.cellMap.set(cellIndex, [i]) }
+      workerPool.push(worker);
+      console.log("WORKER PUSHED TO POOL")
+    }
+  }
+  private calcWorkerSlice(workerId: number, workerCount: number): [number, number] {
+    const { particleCount } = this
+    const baseSlice = Math.ceil(particleCount / workerCount);
+    const start = (baseSlice) * workerId
+    const end = Math.min((baseSlice) * (workerId + 1), particleCount)
+    return [start, end];
+  }
+  private onWorkerMessage(e: MessageEvent): void {
+    if (Atomics.load(this.controlSignal, this.CTRL.STATUS) === this.STATUS.TERMINATED) return; // ignore stragglers from a torn-down sim
+    if (e.data?.type === "ready") {
+      this.readyCount++;
+      console.info(`Worker ${e.data.workerId} ready! Allocated particles ${e.data.workerSlice[0]} to ${e.data.workerSlice[1]}`)
+      if (this.readyCount === this.workerPool.length) {
+        this.readyResolve();                   // all up — unblock ready()
+      }
+    }
+  }
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+  async terminate(): Promise<void> {
+    Atomics.store(this.controlSignal, this.CTRL.STATUS, this.STATUS.TERMINATED)
+    for (const worker of this.workerPool) {
+      worker.terminate()
     }
   }
 
   /* 
    *  Advance the sim by `dt`, dt = ~1 each frame when running at 60fps. 
-   *  probe — pass NullProbe in production, bench.probe in dev.
+   *  probe — undefined in production, bench.probe in dev.
    */
-  update(dt: number): void {
-    
-    const { 
-      posInterleaved, velInterleaved, accumInterleaved, type,
-      particleCount, typeCount, dim,
-      rMax, beta, friction, rules, speed,
-      simWidth, simHeight,
-      probe
+  async update(dt: number): Promise<void> {
+    const {
+      speedLive, frictionLive, rMaxLive, betaLive, rulesLive, boundaryModeLive,
+      typeRMax, typeBeta, rules,
+      liveParams, controlSignal, posRW, 
+      PARAMS, CTRL, MODES, STATUS, POSIDX,
+      workerPool, probe,
+      spatialModule
     } = this;
-    probe?.startSpan("sim:update")
+    // PRECOMPUTE
+    probe?.startSpan("sim:update");
 
-    probe?.startSpan("sim:update:buildGrid");
-    this.buildGrid();
-    probe?.endSpan("sim:update:buildGrid")
-
-    const { cellMap, cellCols } = this;
-
-    accumInterleaved.fill(0);
-
-    const liveFriction = Math.pow(friction, dt / 60);
-
-    function processPair(pi: number, pj: number): void {
-      // const dx = posX[pj] - posX[pi];
-      // const dy = posY[pj] - posY[pi];
-      const dx = posInterleaved[pj] - posInterleaved[pi];
-      const dy = posInterleaved[pj + 1] - posInterleaved[pi + 1]
-
-      const ti = pi / dim;  // particle index for pi
-      const tj = pj / dim;  // particle index for pj
-      
-      // Affinity coefficient.
-      const a: number = rules[type[ti] * typeCount + type[tj]];
-      // Zero coefficient guard
-      if (a === 0) return;
-      // Zero magnitude guard
-      if (dx === 0 && dy === 0) return;
-      // Distance Guard
-      if (dx * dx + dy * dy > rMax * rMax) return;
-      // Compute magnitude, named as distance
-      const distance = Math.sqrt(dx ** 2 + dy ** 2);
-      // Compute normalised vector
-      const nx = dx / distance;
-      const ny = dy / distance;
-      // Compute force
-      const f = force(distance, a, rMax, beta);
-      // Accumulate 
-      accumInterleaved[pi] += f * nx * speed;
-      accumInterleaved[pi + 1] += f * ny * speed; 
-
-      // Again but j affected by i
-      const a2: number = rules[type[tj] * typeCount + type[ti]]
-      const f2 = force(distance, a2, rMax, beta);
-      // Accumulate 
-      accumInterleaved[pj] += f2 * -nx * speed;
-      accumInterleaved[pj + 1] += f2 * -ny * speed;
+    
+    probe?.startSpan("sim:update:updateParamBuffers");
+    controlSignal[CTRL.COUNTER] = 0;
+    posRW[POSIDX.READ] = controlSignal[CTRL.FRAME] & 1;
+    posRW[POSIDX.WRITE] = posRW[POSIDX.READ] ^ 1;
+    liveParams[PARAMS.DT] = dt;
+    liveParams[PARAMS.FRICTION] = Math.pow(frictionLive, dt / 60);
+    if (this.NEW_CHANGE) {
+      liveParams[PARAMS.SPEED] = speedLive;
+      liveParams[PARAMS.BOUNDARY] = MODES[boundaryModeLive];
+      typeRMax.set(rMaxLive);
+      typeBeta.set(betaLive);
+      rules.set(rulesLive);
+      this.NEW_CHANGE = false;
     }
+    spatialModule.positions = this.posBuffers[posRW[POSIDX.READ]]
+    spatialModule.bin();
+    probe?.endSpan("sim:update:updateParamBuffers");
 
-    // Process all interaction between 2 groups
-    function process2ParticleBuckets(b1: number[], b2: number[]): void {
-      if (b2.length > 0 && b1.length > 0)  {
-        for (let i = 0; i < b1.length; i++){
-          for (let j = 0; j < b2.length; j++) {
-            processPair(b1[i], b2[j])
-          }
-        }
+
+    // INITIATE WORKERS
+    probe?.startSpan("sim:update:workers");
+    Atomics.store(controlSignal, CTRL.STATUS, STATUS.RUNNING)
+    Atomics.add(controlSignal, CTRL.FRAME, 1);
+    const awokenWorkers = Atomics.notify(controlSignal, CTRL.FRAME);
+    console.assert(awokenWorkers === workerPool.length, "Awoken workers != Total Workers");
+    
+    // WAIT TILL ALL WORKERS COMPLETE
+    let finishedWorkers = Atomics.load(controlSignal, CTRL.COUNTER);
+    while (finishedWorkers < workerPool.length) {
+      const res = Atomics.waitAsync(controlSignal, CTRL.COUNTER, finishedWorkers);
+      if (res.async) await res.value;
+      finishedWorkers = Atomics.load(controlSignal, CTRL.COUNTER);
+    }
+    
+    probe?.endSpan("sim:update:workers");
+
+    // UPDATE PARTICLE POSITIONS
+    probe?.startSpan("sim:update:referenceCurrentPos");
+    this.currentPositions = this.posBuffers[posRW[POSIDX.WRITE]];
+    this.accumInterleaved.fill(0);
+    let noVel: number[] = [];
+    for (let i = 0; i < this.particleCount; i++) {
+      if (this.velInterleaved[i * this.dim] === 0 && this.velInterleaved[i * this.dim + 1] === 0) {
+        noVel.push(i);
       }
     }
-
-    // Process all interactions within a group
-    function processWithinBucket(b: number[]): void {
-      for (let i = 0; i < b.length; i++){
-        for (let j = 0; j < b.length; j++) {
-          if (j > i) {
-            processPair(b[i], b[j])
-          }
-        }
-      }
+    if (noVel.length) {
+      console.warn(`Particles ${noVel} have 0 velocity!`);
     }
-    function borderRule(i: number, method: "WRAP" | "BOUNCE" | "SNAP" = "BOUNCE") {
-      switch (method) {
-        case "BOUNCE": {
-          if (posInterleaved[i] > simWidth) {
-            posInterleaved[i] = simWidth;
-            velInterleaved[i] *= -1
-          } else if (posInterleaved[i] < 0) {
-            posInterleaved[i] = 0
-            velInterleaved[i] *= -1
-          }
-          if (posInterleaved[i + 1] > simHeight) {
-            posInterleaved[i + 1] = simHeight;
-            velInterleaved[i + 1] *= -1
-          } else if (posInterleaved[i + 1] < 0) {
-            posInterleaved[i + 1] = 0
-            velInterleaved[i + 1] *= -1
-          }
-          break;
-        }
-        case "SNAP":{
-          if (posInterleaved[i] > simWidth) {
-            posInterleaved[i] = simWidth;
-          } else if (posInterleaved[i] < 0) {
-            posInterleaved[i] = 0
-          }
-          if (posInterleaved[i + 1] > simHeight) {
-            posInterleaved[i + 1] = simHeight;
-          } else if (posInterleaved[i + 1] < 0) {
-            posInterleaved[i + 1] = 0
-          }
-          break;
-        }
-        case "WRAP": {
-          if (posInterleaved[i] > simWidth) {
-            posInterleaved[i] -= simWidth;
-          } else if (posInterleaved[i] < 0) {
-            posInterleaved[i] += simWidth
-          }
-          if (posInterleaved[i + 1] > simHeight) {
-            posInterleaved[i + 1] -= simHeight;
-          } else if (posInterleaved[i + 1] < 0) {
-            posInterleaved[i + 1] += simHeight
-          }
-          break;
-        }
-      }
-    }
+    probe?.endSpan("sim:update:referenceCurrentPos")
 
-    // --------- SINGLE FRONT WALK ---------
-    /*  x, x, x,    x = ignored grid cells
-    *   x, s, a,    s = current selected grid cell
-    *   b, c, d     a..d = compare s with a..d
-    *   Every step:
-    *   1: start cellgrid 0, 0
-    *   2: find a..d
-    *   2: s*s check
-    *   3: s*(abcd) check
-    *   4: move s -> a, if doesn't exist done
-    *   5: find new a..d positions
-    *   6: repeat cellgrid.length times
-    */
-    probe?.startSpan("sim:update:walk");
-    const keys = cellMap.keys()
-    for (const i of keys) {
-      let selfBucket = cellMap.get(i) ?? [];
-      let othersBucket = [i + 1, i - 1 + cellCols, i + cellCols, i + 1 + cellCols]
-                         .flatMap(idx => cellMap.get(idx) ?? []);
-
-      probe?.startSpan("sim:update:walk:within");
-      processWithinBucket(selfBucket);
-      probe?.endSpan("sim:update:walk:within");
-
-      probe?.startSpan("sim:update:walk:cross");
-      process2ParticleBuckets(selfBucket, othersBucket);
-      probe?.endSpan("sim:update:walk:cross");
-
-      probe?.accumCount("sim:update:walk:cellsVisited", 1);
-    }
-    probe?.endSpan("sim:update:walk");
-
-    probe?.startSpan("sim:update:integrate")
-    // Apply forces to particles. Then apply boundary logic, then apply friction
-    for (let i = 0; i < particleCount * dim; i += dim) {
-      // accumulate velocity
-      velInterleaved[i] += accumInterleaved[i] * dt;
-      velInterleaved[i + 1] += accumInterleaved[i + 1] * dt;
-      // apply velocity to pos
-      posInterleaved[i] += velInterleaved[i] * dt;
-      posInterleaved[i + 1] += velInterleaved[i + 1] * dt;
-      // World edge handling
-      borderRule(i)
-
-      velInterleaved[i] *= liveFriction;
-      velInterleaved[i + 1] *= liveFriction;
-    }
-    probe?.endSpan("sim:update:integrate");
     probe?.endSpan("sim:update");
     probe?.commitFrame();
   }

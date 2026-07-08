@@ -39,8 +39,8 @@ export class Renderer {
     for (let i = 0, j = 0; i < sim.particleCount * sim.dim; i += sim.dim, j++) {
       const p = new Particle({
         texture: this.texture,
-        x: sim.posInterleaved[i],
-        y: sim.posInterleaved[i + 1],
+        x: sim.currentPositions[i],
+        y: sim.currentPositions[i + 1],
         anchorX: 0.5,
         anchorY: 0.5,
         tint: this.palette[sim.type[j]]
@@ -51,10 +51,11 @@ export class Renderer {
   }
 
   /** Per frame, after sim.update(): copy positions maths -> pixels. */
-  sync(sim: ParticleSimulator) {
+  sync(sim: ParticleSimulator | undefined) {
+    if (!sim) return;
     for (let i = 0, p = 0; i < sim.particleCount * sim.dim; i += sim.dim, p++) {
-      this.renderParticles[p].x = sim.posInterleaved[i];
-      this.renderParticles[p].y = sim.posInterleaved[i + 1];
+      this.renderParticles[p].x = sim.currentPositions[i];
+      this.renderParticles[p].y = sim.currentPositions[i + 1];
     }
   }
 

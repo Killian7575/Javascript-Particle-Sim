@@ -1,13 +1,29 @@
 // Stable Application Controller
 // Orchistrates application running
 
-import { Application, Ticker } from 'pixi.js';
+import { Application } from 'pixi.js';
 import { ParticleSimulator } from '../sim/simulation';
 import { Renderer } from '../render/render';
 import { BenchmarkingTool, type SimProbe } from '../../test/benchmark/benchmark';
 
 const BENCH_ENABLED = import.meta.env.DEV;
 
+interface SimStaticParams {
+    seed: number | string;
+    particleCount: number;
+    typeCount: number;
+    simWidth: number;
+    simHeight: number;
+}
+interface SimLiveParams {
+    speed: number;
+    typeRMax: number[];
+    typeBeta: number[];
+    friction: number;
+    rules: number[];
+    spatialModuleName: SpatialModuleName;
+    boundaryMode: BoundaryMode;
+}
 
 export class AppController {
     app!:   Application; 
@@ -15,24 +31,35 @@ export class AppController {
     ren:    Renderer          | undefined = undefined;
     bench:  BenchmarkingTool  | undefined = undefined;
 
-    densityAim = 600
+    lastFrame: number = 0;
+    loop: () => void = this.frameLoop.bind(this)
+
+    densityAim = 625
     // init default params
-    simParams = {
+    simStaticParams = {
         // rebuild on change
         seed:           Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
         particleCount:  Math.floor(window.innerWidth * window.innerHeight / this.densityAim), 
         typeCount:      3,
-        // live, rebuild not needed
-        simWidth:       window.innerWidth - 100,
-        simHeight:      window.innerHeight - 100,
-        speed:          0.1,
-        rMax:           100,
-        beta:           0.3,
-        friction:       0.05,
-        rules:          undefined as Float64Array | undefined
-    };
+        simWidth:       window.innerWidth,
+        simHeight:      window.innerHeight,
+    } as SimStaticParams;
+    simLiveParams = {
+        speed: 0.1,
+        typeRMax: Array(this.simStaticParams.typeCount),
+        typeBeta: Array(this.simStaticParams.typeCount),
+        friction: 0.05,
+        rules: Array(this.simStaticParams.typeCount ** 2),
+        spatialModuleName: "GRID",
+        boundaryMode: "WRAP",
+    } as SimLiveParams;
+    readonly testRules = [
+      -0.7824554443359375, -0.5159652233123779, -0.7399479150772095,
+       0.7869302034378052, -0.7077521681785583,  0.7734294533729553,
+      -0.9772785305976868,  0.8419510126113892, -0.7135220766067505 
+    ]
 
-    private tickerInstance: ((ticker: Ticker) => void) | undefined = undefined;
+    // private tickerInstance: ((ticker: Ticker) => void) | undefined = undefined;
 
     private probe: SimProbe | undefined = undefined;
 
@@ -49,21 +76,26 @@ export class AppController {
 
         if (BENCH_ENABLED) {
             this.bench = new BenchmarkingTool();
-            this.probe = undefined; /// TEMP CHANGE -------------------- CHANGE BACK AFTER
+            this.probe = this.bench.getProbe;
 
             // Expose to browser devtools
             window.__app = this;
             window.__bench = this.bench;
-            window.__startBench = (frames: number, runs: number, warmup: number, cfg: FullConfig) =>
+            window.__startBench = (frames: number = 10000, runs: number = 3, warmup: number = 60, cfg: FullConfig) =>
                 this.runBench(frames, runs, warmup, cfg);
         }
+        this.simLiveParams.typeBeta.fill(0.3);
+        this.simLiveParams.typeRMax.fill(100);
+        if (this.simStaticParams.typeCount === 3) {
+            this.simLiveParams.rules = this.testRules;
+        } 
     }
 
     private runBench(frames: number, runs: number, warmup: number, fullConfig: FullConfig) {
         if (!this.bench) return;
-        const t0 = performance.now()
-        // Pause the live render loop so it doesn't interfere with timing
-        this.pauseLoop();
+        const t0 = performance.now();
+        // clear the live render loop so it doesn't interfere with timings
+        this.clearRunning()
     
         this.bench.benchmarkRun(
             frames,
@@ -72,98 +104,98 @@ export class AppController {
             fullConfig,
             (cfg, probe) => {
                 // Factory: create a fresh headless sim for each run
-                const sim = new ParticleSimulator(cfg, probe);
+                const sim = new ParticleSimulator(cfg, "GRID", probe); // TEMP HARDCODED MODULE METHOD
                 // Apply any overrides from fullConfig (speed, rMax, etc.)
                 return Object.assign(sim, cfg);
             },
         );
         const ms = performance.now() - t0
         function deriveMinutesAndSeconds(ms: number): Number {
-            const minutes = ((ms / 1000) / 60) 
-            const remainderMin = minutes - Math.floor(minutes)
-            return (Math.floor(minutes) + (remainderMin * 0.6))
+            const minutes = ((ms / 1000) / 60) ;
+            const remainderMin = minutes - Math.floor(minutes);
+            return (Math.floor(minutes) + (remainderMin * 0.6));
         }
         const minutesAndSeconds = deriveMinutesAndSeconds(ms)
         const perRun = deriveMinutesAndSeconds(ms / runs);
         const per1000Frames = deriveMinutesAndSeconds(ms * (1000 / (runs * frames)));
-        console.log("Benchmark Complete")
-        console.log(`Total Runtime: ${minutesAndSeconds.toFixed(2)} minutes.seconds, ${ms.toFixed(1)}ms`)
-        console.log(`Per Run: ${perRun.toFixed(2)} minutes.seconds`)
-        console.log(`Per 1000 frames: ${per1000Frames.toFixed(2)} minutes.seconds`)
-        this.resumeLoop();
+        console.log("Benchmark Complete");
+        console.log(`Total Runtime: ${minutesAndSeconds.toFixed(2)} minutes.seconds, ${ms.toFixed(1)}ms`);
+        console.log(`Per Run: ${perRun.toFixed(2)} minutes.seconds`);
+        console.log(`Per 1000 frames: ${per1000Frames.toFixed(2)} minutes.seconds`);
     }
 
     applyLiveParams(str: SimParameter = "all"): void {
         if (!this.sim) return;
         switch (str) {
-            case "simSize": { // TODO: Move to restart only param
-                this.sim.simWidth = this.simParams.simWidth
-                this.sim.simHeight = this.simParams.simHeight
-                break;
-            }
             case "speed": {
-                this.sim.speed = this.simParams.speed
+                this.sim.speedLive = this.simLiveParams.speed;
                 break;
             }
             case "rMax": {
-                this.sim.rMax = this.simParams.rMax
+                this.sim.rMaxLive = this.simLiveParams.typeRMax;
                 break;
             }
             case "beta": {
-                this.sim.beta = this.simParams.beta
+                this.sim.betaLive = this.simLiveParams.typeBeta;
                 break;
             }
             case "friction": {
-                this.sim.friction = this.simParams.friction
+                this.sim.frictionLive = this.simLiveParams.friction;
                 break;
             }
             case "rules": {
-                console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
-                this.sim.rules.set(this.simParams.rules!)
+                this.sim.rulesLive = this.simLiveParams.rules;
+                break;
+            }
+            case "boundary": {
+                this.sim.boundaryModeLive = this.simLiveParams.boundaryMode;
                 break;
             }
             case "all": {
-                this.sim.simWidth = this.simParams.simWidth
-                this.sim.simHeight = this.simParams.simHeight
-                this.sim.speed = this.simParams.speed
-                this.sim.rMax = this.simParams.rMax
-                this.sim.beta = this.simParams.beta
-                this.sim.friction = this.simParams.friction
-                console.assert((this.simParams.rules !== undefined), "Attempting to apply undefined rules")
-                this.sim.rules.set(this.simParams.rules!)
+                this.sim.speedLive = this.simLiveParams.speed;
+                this.sim.rMaxLive = this.simLiveParams.typeRMax;
+                this.sim.betaLive = this.simLiveParams.typeBeta;
+                this.sim.frictionLive = this.simLiveParams.friction;
+                this.sim.rulesLive = this.simLiveParams.rules;
+                this.sim.boundaryModeLive = this.simLiveParams.boundaryMode;
                 break;
             }
         }
+        this.sim.NEW_CHANGE = true;
     }
 
 
-    startSim() {
+    async startSim() {
         this.clearRunning()
-        const config: Config = this.simParams
-        this.sim = new ParticleSimulator(config, this.probe);
-        this.simParams.rules = this.sim.rules // TODO: unintentional rules variable reset to default every sim start
+        const config: Config = this.simStaticParams
+        this.sim = new ParticleSimulator(config, this.simLiveParams.spatialModuleName, this.probe);
+        if (!this.simLiveParams.rules) {
+            this.simLiveParams.rules = this.sim.rulesLive
+        }
         this.applyLiveParams()
+        await this.sim.ready()
+
 
         this.ren = new Renderer(this.sim)
         this.app.stage.addChild(this.ren.container);
 
-        this.tickerInstance = (ticker) => {
-            this.sim!.update(ticker.deltaTime);
-            this.ren!.sync(this.sim!);
-        };
-        this.app.ticker.add(this.tickerInstance);
+        window.requestAnimationFrame(this.loop);
     }
 
     clearRunning() {
-        if (this.tickerInstance) {
-            this.app.ticker.remove(this.tickerInstance);
-            this.tickerInstance = undefined;
-        }
         if (this.ren) {
             this.app.stage.removeChild(this.ren.container);
             this.ren = undefined;
         }
         this.sim = undefined;
+    }
+
+    async frameLoop() {
+        const { sim, ren } = this
+        console.log("frameLoop'd")
+        await sim?.update(1)
+        ren?.sync(this.sim);
+        window.requestAnimationFrame(this.loop);
     }
 
     pauseLoop()  { this.app.ticker.stop();  }
