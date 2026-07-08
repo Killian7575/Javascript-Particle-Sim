@@ -301,15 +301,6 @@ export class ParticleSimulator {
     probe?.startSpan("sim:update:referenceCurrentPos");
     this.currentPositions = this.posBuffers[posRW[POSIDX.WRITE]];
     this.accumInterleaved.fill(0);
-    let noVel: number[] = [];
-    for (let i = 0; i < this.particleCount; i++) {
-      if (this.velInterleaved[i * this.dim] === 0 && this.velInterleaved[i * this.dim + 1] === 0) {
-        noVel.push(i);
-      }
-    }
-    if (noVel.length) {
-      console.warn(`Particles ${noVel} have 0 velocity!`);
-    }
     probe?.endSpan("sim:update:referenceCurrentPos")
 
     probe?.endSpan("sim:update");
