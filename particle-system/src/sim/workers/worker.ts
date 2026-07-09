@@ -1,4 +1,4 @@
-import { computeSliceForces, integrateSliceForces } from "../forces/forces";
+import { computeSliceForcesWrap, computeSliceForcesNoWrap, integrateSliceForces } from "../forces/forces";
 import type { ComputeSliceForcesBuffers, ComputeSliceForcesParams, IntegrateSliceForcesParams } from "../forces/forces";
 import { createPartitioner } from "../spatialPartition/PartitionModules";
 
@@ -77,11 +77,11 @@ class SimWorker {
         this.parse = this.spatial.parse.bind(this.spatial)
 
     }
-    private makeMinImageDist() {
-        const wrap = (dist: number, size: number) => dist - size * Math.round(dist / size);
-        const none = (dist: number, _size: number) => dist;
-        return this.liveParams[this.PARAMS.BOUNDARY] === this.MODES.WRAP ? wrap : none;
-    }
+    // private makeMinImageDist() {
+    //     const wrap = (dist: number, size: number) => dist - size * Math.round(dist / size);
+    //     const none = (dist: number, _size: number) => dist;
+    //     return this.liveParams[this.PARAMS.BOUNDARY] === this.MODES.WRAP ? wrap : none;
+    // }
     start() {
         const { controlSignal, CTRL } = this;
         let frame = Atomics.load(controlSignal, CTRL.FRAME);
@@ -108,8 +108,12 @@ class SimWorker {
             posBuffers, posRW
             } = this;
         const { vel, accum } = computeBuffers
-        const minImg = this.makeMinImageDist();
+        // const minImg = this.makeMinImageDist();
+        
         const boundaryMode = liveParams[PARAMS.BOUNDARY]
+        const kernal = (boundaryMode === MODES.WRAP)
+            ? computeSliceForcesWrap
+            : computeSliceForcesNoWrap;
         if (MODES[spatial.boundaryMode] !== boundaryMode) {
             switch (boundaryMode) {
                 case (MODES.WRAP): {
@@ -133,12 +137,12 @@ class SimWorker {
             dt: liveParams[PARAMS.DT],
             frictionMulti: liveParams[PARAMS.FRICTION],
         }
-        computeSliceForces(
+        kernal(
             computeBuffers,
             workerRange,
             spatial.neighbourScratch,
             world,
-            minImg,
+            // minImg,
             this.parse,
             computeParams)
         integrateSliceForces(

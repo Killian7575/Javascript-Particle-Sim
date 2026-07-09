@@ -18,18 +18,21 @@ export interface IntegrateSliceForcesParams {
     dt: number;
     frictionMulti: number;
 }
-export function computeSliceForces(
+export function computeSliceForcesNoWrap(
     buffers: ComputeSliceForcesBuffers,
     slice: [start: number, end: number],
     neighbourScratch: Uint32Array,
     world: World,
-    minImg: (dist: number, size: number) => number, 
+    // minImg: (dist: number, size: number) => number, 
     parse: SpatialPartitionClass["parse"],
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
     const { dim, typeCount } = params;
-    const { simWidth, simHeight } = world;
+    // const { simWidth, simHeight } = world;
+    // const minImg = (dist: number, _size: number) => dist;
+    
+        
     
     for (let i = slice[0]; i < slice[1]; i++) {
         const pi = i * dim;
@@ -45,8 +48,54 @@ export function computeSliceForces(
                 const a: number = rules[iType * typeCount + jType];
                 if (a === 0) continue;
 
-                const dx = minImg(pos[pj] - pos[pi], simWidth);
-                const dy = minImg(pos[pj + 1] - pos[pi + 1], simHeight);
+                const dx = pos[pj] - pos[pi];
+                const dy = pos[pj + 1] - pos[pi + 1];
+                if (dx === 0 && dy === 0) continue;
+                if (dx * dx + dy * dy > rMax * rMax) continue;
+
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const f = force(dist, a, rMax, beta);
+
+                accum[pi] += f * (dx / dist);
+                accum[pi + 1] += f * (dy / dist);
+            }
+        }
+    }
+}
+export function computeSliceForcesWrap(
+    buffers: ComputeSliceForcesBuffers,
+    slice: [start: number, end: number],
+    neighbourScratch: Uint32Array,
+    world: World,
+    // minImg: (dist: number, size: number) => number, 
+    parse: SpatialPartitionClass["parse"],
+    params: ComputeSliceForcesParams
+): void {
+    const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
+    const { dim, typeCount } = params;
+    const { simWidth, simHeight } = world;
+    // const minImg = (dist: number, size: number) => dist - size * Math.round(dist / size);
+    
+    for (let i = slice[0]; i < slice[1]; i++) {
+        const pi = i * dim;
+        const iType = type[i];
+        const rMax = typeRMax[iType];
+        const beta = typeBeta[iType];
+        for (const n of parse({particleIndex: pi, rMax})) {
+            for (let j = 0; j < n; j++) {
+                const pj = neighbourScratch[j] * dim;
+                if (pj === pi) continue;
+                
+                const jType = type[neighbourScratch[j]];
+                const a: number = rules[iType * typeCount + jType];
+                if (a === 0) continue;
+
+                // const dx = minImg(pos[pj] - pos[pi], simWidth);
+                const xDist = pos[pj] - pos[pi]
+                const dx = xDist - simWidth * Math.round(xDist / simWidth);
+                // const dy = minImg(pos[pj + 1] - pos[pi + 1], simHeight);
+                const yDist = pos[pj + 1] - pos[pi + 1]
+                const dy = yDist - simHeight * Math.round(yDist / simHeight)
                 if (dx === 0 && dy === 0) continue;
                 if (dx * dx + dy * dy > rMax * rMax) continue;
 
