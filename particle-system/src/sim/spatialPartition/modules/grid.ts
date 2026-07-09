@@ -116,7 +116,6 @@ export class Grid implements SpatialPartitionClass {
             runningTotal += particlesPerCellCount[cell];
         }
         gridCellStartOffsets[totalCells] = runningTotal;
-        console.assert(runningTotal === particleCount, "runningTotal !== particleCount");
 
         // PASS 3: Scatter (place particles into their slices)
         cursorOfCellOffsets.set(gridCellStartOffsets);
@@ -125,7 +124,6 @@ export class Grid implements SpatialPartitionClass {
             gridSortedParticleIndicies[cursorOfCellOffsets[cell]] = i;
             cursorOfCellOffsets[cell] += 1;
         }
-        console.assert(cursorOfCellOffsets != gridCellStartOffsets);
     }
     *parse(input: SpatialPartitionMethodParseInput): IterableIterator<number> {
         const { particleIndex, rMax } = input;

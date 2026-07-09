@@ -130,7 +130,6 @@ export class ParticleSimulator {
     
     this.seed();
     this.currentPositions = this.posBuffers[0]
-    console.info("hardwareConcurrency = " + navigator.hardwareConcurrency)
     this.readyPromise = new Promise((resolve) => {
       this.readyResolve = resolve; 
     });
@@ -161,7 +160,6 @@ export class ParticleSimulator {
       posBuffers, velInterleaved, type
      } = this
      const pos = posBuffers[this.posRW[this.POSIDX.READ]];
-    console.log(particleCount)
     for (let i = 0, p = 0; i < particleCount * dim; i += dim, p++) {
       pos[i] = random() * simWidth;
       pos[i + 1] = random() * simHeight;
@@ -284,8 +282,8 @@ export class ParticleSimulator {
     probe?.startSpan("sim:update:workers");
     Atomics.store(controlSignal, CTRL.STATUS, STATUS.RUNNING)
     Atomics.add(controlSignal, CTRL.FRAME, 1);
-    const awokenWorkers = Atomics.notify(controlSignal, CTRL.FRAME);
-    console.assert(awokenWorkers === workerPool.length, "Awoken workers != Total Workers");
+    Atomics.notify(controlSignal, CTRL.FRAME);
+  
     
     // WAIT TILL ALL WORKERS COMPLETE
     let finishedWorkers = Atomics.load(controlSignal, CTRL.COUNTER);

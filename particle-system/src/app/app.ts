@@ -191,9 +191,8 @@ export class AppController {
     }
 
     async frameLoop() {
-        const { sim, ren } = this
-        console.log("frameLoop'd")
-        await sim?.update(1)
+        const { sim, ren } = this;
+        await sim?.update(1);
         ren?.sync(this.sim);
         window.requestAnimationFrame(this.loop);
     }

@@ -77,11 +77,6 @@ class SimWorker {
         this.parse = this.spatial.parse.bind(this.spatial)
 
     }
-    // private makeMinImageDist() {
-    //     const wrap = (dist: number, size: number) => dist - size * Math.round(dist / size);
-    //     const none = (dist: number, _size: number) => dist;
-    //     return this.liveParams[this.PARAMS.BOUNDARY] === this.MODES.WRAP ? wrap : none;
-    // }
     start() {
         const { controlSignal, CTRL } = this;
         let frame = Atomics.load(controlSignal, CTRL.FRAME);
@@ -108,10 +103,9 @@ class SimWorker {
             posBuffers, posRW
             } = this;
         const { vel, accum } = computeBuffers
-        // const minImg = this.makeMinImageDist();
         
         const boundaryMode = liveParams[PARAMS.BOUNDARY]
-        const kernal = (boundaryMode === MODES.WRAP)
+        const computeSliceForces = (boundaryMode === MODES.WRAP)
             ? computeSliceForcesWrap
             : computeSliceForcesNoWrap;
         if (MODES[spatial.boundaryMode] !== boundaryMode) {
@@ -137,12 +131,11 @@ class SimWorker {
             dt: liveParams[PARAMS.DT],
             frictionMulti: liveParams[PARAMS.FRICTION],
         }
-        kernal(
+        computeSliceForces(
             computeBuffers,
             workerRange,
             spatial.neighbourScratch,
             world,
-            // minImg,
             this.parse,
             computeParams)
         integrateSliceForces(
