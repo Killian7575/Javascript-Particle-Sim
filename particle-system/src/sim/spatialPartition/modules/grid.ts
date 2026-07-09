@@ -1,3 +1,4 @@
+import { clamp } from "../../../core/util";
 export const gridModule: PartitionModule = {
     getBufferSpec(config: SpatialPartitionClassSizeConfig): BufferSpec[] {
         const { simWidth, simHeight, particleCount } = config
@@ -36,7 +37,8 @@ export class Grid implements SpatialPartitionClass {
     private readonly particleCellIndex: number[];
     private readonly cursorOfCellOffsets: Uint32Array;
 
-    private readonly cellVisitedThisParse: boolean[]
+    private epoch: number;
+    private readonly cellEpoch: Uint32Array;
 
     readonly neighbourScratch: Uint32Array
 
@@ -61,11 +63,13 @@ export class Grid implements SpatialPartitionClass {
         this.particlesPerCellCount = Array(this.totalCells);
         this.particleCellIndex = Array(particleCount)
         this.cursorOfCellOffsets = new Uint32Array(this.totalCells + 1);
-        this.cellVisitedThisParse = Array(this.totalCells)
         this.neighbourScratch = new Uint32Array(particleCount);
+
+        this.epoch = 0;
+        this.cellEpoch = new Uint32Array(this.totalCells);
     }
     static calcCellSize(simWidth: number, simHeight: number, particleCount: number): number {
-        const magicMultiplier = 3;
+        const magicMultiplier = 8;
 
         const mapArea = simWidth * simHeight;
         const pixelsPerParticle = mapArea / particleCount;
@@ -76,10 +80,6 @@ export class Grid implements SpatialPartitionClass {
 
     private cellIndexForPosition(x: number, y: number): number {
         const { cellSize, totalColumns, totalRows } = this;
-
-        function clamp(num: number, min: number, max: number): number {
-            return Math.min(Math.max(num, min), max)
-        }
 
         const columnIndex = clamp(Math.floor(x / cellSize), 0, totalColumns - 1);
         const rowIndex = clamp(Math.floor(y / cellSize), 0, totalRows - 1);
@@ -131,13 +131,12 @@ export class Grid implements SpatialPartitionClass {
         const { particleIndex, rMax } = input;
         const { 
             totalColumns, totalRows, boundaryMode, 
-            cellSize, gridCellStartOffsets, cellVisitedThisParse, gridSortedParticleIndicies,
-            positions, neighbourScratch
+            cellSize, gridCellStartOffsets, gridSortedParticleIndicies,
+            neighbourScratch, cellEpoch,
+            positions
         } = this
 
-        function clamp(num: number, min: number, max: number): number {
-            return Math.min(Math.max(num, min), max)
-        }
+        if (this.epoch++ === 0) { cellEpoch.fill(0); this.epoch = 1; } //epoch increment + overflow handle 
 
         const homeColumn = clamp(Math.floor(positions[particleIndex] / cellSize), 0, totalColumns - 1);
         const homeRow = clamp(Math.floor(positions[particleIndex + 1] / cellSize), 0, totalRows - 1);
@@ -145,8 +144,6 @@ export class Grid implements SpatialPartitionClass {
         // const homeCell = homeColumn + homeRow * totalColumns;
 
         const ringCount = Math.ceil(rMax / cellSize)
-
-        cellVisitedThisParse.fill(false)
 
         for (let rowOffset = -ringCount; rowOffset < ringCount + 1; rowOffset++) {
             for (let colOffset = -ringCount; colOffset < ringCount + 1; colOffset++) {
@@ -167,8 +164,8 @@ export class Grid implements SpatialPartitionClass {
                     continue;
                 }
                 neighbourCell = neighbourRow * totalColumns + neighbourColumn;
-                if (!cellVisitedThisParse[neighbourCell]) {
-                    cellVisitedThisParse[neighbourCell] = true;
+                if (cellEpoch[neighbourCell] !== this.epoch) {
+                    cellEpoch[neighbourCell] = this.epoch;
                     const start = gridCellStartOffsets[neighbourCell];
                     const end = gridCellStartOffsets[neighbourCell + 1];
                     const length = end - start;
@@ -176,7 +173,7 @@ export class Grid implements SpatialPartitionClass {
                         neighbourScratch[i] = gridSortedParticleIndicies[start + i]
                     }
                     yield length;
-                    // length & neighbourScratch only valid till next local parse yeild 
+                    // length & neighbourScratch only valid till next local parse yeild
                 }
             }
         }
