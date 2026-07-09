@@ -23,14 +23,11 @@ export function computeSliceForcesNoWrap(
     slice: [start: number, end: number],
     neighbourScratch: Uint32Array,
     world: World,
-    // minImg: (dist: number, size: number) => number, 
     parse: SpatialPartitionClass["parse"],
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
     const { dim, typeCount } = params;
-    // const { simWidth, simHeight } = world;
-    // const minImg = (dist: number, _size: number) => dist;
     
         
     
@@ -66,15 +63,13 @@ export function computeSliceForcesWrap(
     buffers: ComputeSliceForcesBuffers,
     slice: [start: number, end: number],
     neighbourScratch: Uint32Array,
-    world: World,
-    // minImg: (dist: number, size: number) => number, 
+    world: World, 
     parse: SpatialPartitionClass["parse"],
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
     const { dim, typeCount } = params;
     const { simWidth, simHeight } = world;
-    // const minImg = (dist: number, size: number) => dist - size * Math.round(dist / size);
     
     for (let i = slice[0]; i < slice[1]; i++) {
         const pi = i * dim;
@@ -90,12 +85,10 @@ export function computeSliceForcesWrap(
                 const a: number = rules[iType * typeCount + jType];
                 if (a === 0) continue;
 
-                // const dx = minImg(pos[pj] - pos[pi], simWidth);
                 const xDist = pos[pj] - pos[pi]
                 const dx = xDist - simWidth * Math.round(xDist / simWidth);
-                // const dy = minImg(pos[pj + 1] - pos[pi + 1], simHeight);
-                const yDist = pos[pj + 1] - pos[pi + 1]
-                const dy = yDist - simHeight * Math.round(yDist / simHeight)
+                const yDist = pos[pj + 1] - pos[pi + 1];
+                const dy = yDist - simHeight * Math.round(yDist / simHeight);
                 if (dx === 0 && dy === 0) continue;
                 if (dx * dx + dy * dy > rMax * rMax) continue;
 

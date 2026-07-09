@@ -26,7 +26,7 @@ export class Renderer {
       return Texture.from(canvas);
     })();
     this.container = new ParticleContainer({
-      dynamicProperties: { // Verbose, all these values are also the default
+      dynamicProperties: { // Verbose, true = autoupdates, false = container.update() to update
         position: true,  // Update positions each frame
         rotation: false,  // static rotation
         vertex: false,   // Static vertices
