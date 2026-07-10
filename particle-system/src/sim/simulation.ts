@@ -129,7 +129,7 @@ export class ParticleSimulator {
     this.initBufferParams()
     
     this.seed();
-    this.currentPositions = this.posBuffers[0]
+    this.currentPositions = this.posBuffers[this.posRW[this.POSIDX.WRITE]]
     this.readyPromise = new Promise((resolve) => {
       this.readyResolve = resolve; 
     });
@@ -237,8 +237,11 @@ export class ParticleSimulator {
   }
   async terminate(): Promise<void> {
     Atomics.store(this.controlSignal, this.CTRL.STATUS, this.STATUS.TERMINATED)
+    let i = 0;
     for (const worker of this.workerPool) {
       worker.terminate()
+      console.info(`Worker ${i} was terminated`)
+      i++
     }
   }
 
