@@ -157,9 +157,6 @@ export class Grid implements SpatialPartitionClass {
         const homeColumn = clamp(Math.floor(positions[particleIndex] / cellWidth), 0, totalColumns - 1);
         const homeRow = clamp(Math.floor(positions[particleIndex + 1] / cellHeight), 0, totalRows - 1);
         
-        // const homeCell = homeColumn + homeRow * totalColumns;
-
-        // const ringCount = Math.ceil(rMax / cellSize);
         const colRingCount = Math.ceil(rMax / cellWidth);
         const rowRingCount = Math.ceil(rMax / cellHeight);
 
