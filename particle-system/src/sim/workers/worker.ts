@@ -131,6 +131,7 @@ class SimWorker {
             speed: liveParams[PARAMS.SPEED],
             dt: liveParams[PARAMS.DT],
             frictionMulti: liveParams[PARAMS.FRICTION],
+            maxVel: liveParams[PARAMS.MAXVELOCITY]
         }
         computeSliceForces(
             computeBuffers,

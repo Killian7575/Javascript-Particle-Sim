@@ -25,6 +25,7 @@ interface SimLiveParams {
     rules: number[];
     spatialModuleName: SpatialModuleName;
     boundaryMode: BoundaryMode;
+    maxVelocity: number;
 }
 
 export class AppController {
@@ -38,7 +39,7 @@ export class AppController {
     private rafHandle?: number;
 
     private spacingDefault = 25;
-    private aspectRatioDefault = 1;
+    private aspectRatioDefault = 16/9;
     private particleCountDefault = 3000;
     private typeCountDefault = 3;
     // init default params
@@ -58,6 +59,7 @@ export class AppController {
         rules: [],
         spatialModuleName: "GRID",
         boundaryMode: "WRAP",
+        maxVelocity: 5,
     } as SimLiveParams;
     readonly testRules = [
       -0.7824554443359375, -0.5159652233123779, -0.7399479150772095,
@@ -157,6 +159,10 @@ export class AppController {
                 this.sim.boundaryModeLive = this.simLiveParams.boundaryMode;
                 break;
             }
+            case "maxVelocity": {
+                this.sim.maxVelocityLive = this.simLiveParams.maxVelocity;
+                break;
+            }
             case "all": {
                 this.sim.speedLive = this.simLiveParams.speed;
                 this.sim.rMaxLive = this.simLiveParams.typeRMax;
@@ -164,6 +170,7 @@ export class AppController {
                 this.sim.frictionLive = this.simLiveParams.friction;
                 this.sim.rulesLive = this.simLiveParams.rules;
                 this.sim.boundaryModeLive = this.simLiveParams.boundaryMode;
+                this.sim.maxVelocityLive = this.simLiveParams.maxVelocity;
                 break;
             }
         }

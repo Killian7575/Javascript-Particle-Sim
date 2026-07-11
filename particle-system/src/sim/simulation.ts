@@ -42,7 +42,7 @@ export class ParticleSimulator {
   private readonly MODES: WorkerBoundaryModes = { WRAP: 0, BOUNCE: 1, SNAP: 2 };
   private readonly CTRL: WorkerControls = { FRAME: 0, COUNTER: 1, STATUS: 2 };
   private readonly STATUS: WorkerStatus = { RUNNING: 0, COMPLETE: 1, TERMINATED: 2 };
-  private readonly PARAMS: WorkerLiveParams = { DT: 0, SPEED: 1, FRICTION: 2, BOUNDARY: 3 };
+  private readonly PARAMS: WorkerLiveParams = { DT: 0, SPEED: 1, FRICTION: 2, BOUNDARY: 3, MAXVELOCITY: 4 };
   private readonly POSIDX: WorkerReadWrite = { READ: 0, WRITE: 1 };
   private readonly controlSignal: Int32Array<SharedArrayBuffer>;
   private readonly posRW: Uint8Array<SharedArrayBuffer>;
@@ -54,6 +54,7 @@ export class ParticleSimulator {
   frictionLive = 0.05;     // Represents remaining velocity after 1 second of friction
   rMaxLive: number[];          // interaction radius (== future CELL_SIZE at M5)
   betaLive: number[];          // fraction of rMax that is pure repulsion
+  maxVelocityLive: number;
   readonly simWidth: number;       
   readonly simHeight: number;
   readonly spacing: number;
@@ -128,6 +129,7 @@ export class ParticleSimulator {
     this.rMaxLive = Array(typeCount).fill(100);
     this.betaLive = Array(typeCount).fill(0.3);
     this.rulesLive = Array(typeCount * typeCount);
+    this.maxVelocityLive = 5;
 
     
     this.randomRules()
@@ -258,7 +260,7 @@ export class ParticleSimulator {
    */
   async update(dt: number): Promise<void> {
     const {
-      speedLive, frictionLive, rMaxLive, betaLive, rulesLive, boundaryModeLive,
+      speedLive, frictionLive, rMaxLive, betaLive, rulesLive, boundaryModeLive, maxVelocityLive,
       typeRMax, typeBeta, rules,
       liveParams, controlSignal, posRW, 
       PARAMS, CTRL, MODES, STATUS, POSIDX,
@@ -278,6 +280,7 @@ export class ParticleSimulator {
     if (this.NEW_CHANGE) {
       liveParams[PARAMS.SPEED] = speedLive;
       liveParams[PARAMS.BOUNDARY] = MODES[boundaryModeLive];
+      liveParams[PARAMS.MAXVELOCITY] = maxVelocityLive;
       typeRMax.set(rMaxLive);
       typeBeta.set(betaLive);
       rules.set(rulesLive);
