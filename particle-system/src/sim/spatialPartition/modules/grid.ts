@@ -1,12 +1,10 @@
 import { clamp } from "../../../core/util";
-export const gridModule: PartitionModule = {
-    getBufferSpec(config: SpatialPartitionClassSizeConfig): BufferSpec[] {
-        const { simWidth, simHeight, particleCount } = config
-        const cellSize = Grid.calcCellSize(simWidth, simHeight, particleCount);
-        const totalColumns = Math.ceil(simHeight / cellSize);
-        const totalRows    = Math.ceil(simWidth  / cellSize);
-        const totalCells   = totalColumns * totalRows;
 
+export const gridModule: PartitionModule = {
+    getBufferSpec(config: BufferSpecConfig): BufferSpec[] {
+        const { particleCount, spacing } = config;
+        const { cellSize } = Grid.calcCellSize(spacing);
+        const { totalCells } = calcGridDimensions(cellSize, config.world);
         return [{
             name: "gridCellStartOffsets",
             byteLength: (totalCells + 1) * Uint32Array.BYTES_PER_ELEMENT 
@@ -18,6 +16,21 @@ export const gridModule: PartitionModule = {
     create(config: SpatialPartitionClassConstructor): SpatialPartitionClass {
         return new Grid(config);
     },
+    adjustWorldSize(config: AdjustWorldSizeConfig): World {
+        let { simWidth, simHeight } = config.world;
+        return { simWidth, simHeight }
+    }
+}
+interface GridDimensions {
+    totalColumns: number;
+    totalRows: number;
+    totalCells: number;
+}
+function calcGridDimensions(cellSize: number, world: World): GridDimensions {
+    const { simWidth, simHeight } = world
+    const totalColumns = Math.max(1, Math.round(simWidth  / cellSize))
+    const totalRows    = Math.max(1, Math.round(simHeight / cellSize))
+    return { totalColumns, totalRows, totalCells: totalColumns * totalRows }
 }
 
 export class Grid implements SpatialPartitionClass {
@@ -28,6 +41,8 @@ export class Grid implements SpatialPartitionClass {
     private readonly totalColumns: number;
     private readonly totalRows: number;
     private readonly totalCells: number;
+    private readonly cellWidth: number;
+    private readonly cellHeight: number;
 
     positions: Float64Array<SharedArrayBuffer>;
     private readonly gridCellStartOffsets: Uint32Array<SharedArrayBuffer>;
@@ -45,16 +60,22 @@ export class Grid implements SpatialPartitionClass {
     boundaryMode: BoundaryMode = "WRAP";
 
     constructor(config: SpatialPartitionClassConstructor) {
-        const { simWidth, simHeight, particleCount, dimension, requestedBuffers, positions } = config;
+        const { simWidth, simHeight, particleCount, dimension, requestedBuffers, positions, spacing } = config;
         const { gridCellStartOffsets, gridSortedParticleIndicies } = requestedBuffers
   
         this.particleCount = particleCount;
         this.dimension = dimension;
-        this.cellSize = Grid.calcCellSize(simWidth, simHeight, particleCount);
 
-        this.totalRows = Math.ceil(simHeight / this.cellSize);  
-        this.totalColumns = Math.ceil(simWidth / this.cellSize);
-        this.totalCells = this.totalColumns * this.totalRows;
+        const { cellSize } = Grid.calcCellSize(spacing);
+        this.cellSize = cellSize;
+
+        const { totalColumns, totalRows, totalCells } = calcGridDimensions(cellSize, {simWidth, simHeight});
+        this.totalColumns = totalColumns;
+        this.totalRows = totalRows;  
+        this.totalCells = totalCells;
+
+        this.cellWidth = simWidth  / totalColumns;
+        this.cellHeight = simHeight / totalRows;
 
         this.positions = positions;
         this.gridCellStartOffsets = new Uint32Array(gridCellStartOffsets);
@@ -68,14 +89,10 @@ export class Grid implements SpatialPartitionClass {
         this.epoch = 0;
         this.cellEpoch = new Uint32Array(this.totalCells);
     }
-    static calcCellSize(simWidth: number, simHeight: number, particleCount: number): number {
-        const magicMultiplier = 8;
-
-        const mapArea = simWidth * simHeight;
-        const pixelsPerParticle = mapArea / particleCount;
-        const avgRadiusSpacing = Math.sqrt(pixelsPerParticle / Math.PI);
-
-        return Math.floor(avgRadiusSpacing) * magicMultiplier;
+    static calcCellSize(spacing: number): { cellSize: number } {
+        const targetParticlesPerCell = 20;
+        const cellSizeMultiplier =  Math.sqrt(targetParticlesPerCell); // averageParticlesPerCell = cellSizeMultiplier²
+        return { cellSize: Math.floor(spacing) * cellSizeMultiplier };
     }
 
     private cellIndexForPosition(x: number, y: number): number {
@@ -128,23 +145,26 @@ export class Grid implements SpatialPartitionClass {
     *parse(input: SpatialPartitionMethodParseInput): IterableIterator<number> {
         const { particleIndex, rMax } = input;
         const { 
-            totalColumns, totalRows, boundaryMode, 
-            cellSize, gridCellStartOffsets, gridSortedParticleIndicies,
+            totalColumns, totalRows, boundaryMode,
+            gridCellStartOffsets, gridSortedParticleIndicies,
             neighbourScratch, cellEpoch,
-            positions
+            positions,
+            cellWidth, cellHeight
         } = this
 
         if (this.epoch++ === 0) { cellEpoch.fill(0); this.epoch = 1; } //epoch increment + overflow handle 
 
-        const homeColumn = clamp(Math.floor(positions[particleIndex] / cellSize), 0, totalColumns - 1);
-        const homeRow = clamp(Math.floor(positions[particleIndex + 1] / cellSize), 0, totalRows - 1);
-
+        const homeColumn = clamp(Math.floor(positions[particleIndex] / cellWidth), 0, totalColumns - 1);
+        const homeRow = clamp(Math.floor(positions[particleIndex + 1] / cellHeight), 0, totalRows - 1);
+        
         // const homeCell = homeColumn + homeRow * totalColumns;
 
-        const ringCount = Math.ceil(rMax / cellSize)
+        // const ringCount = Math.ceil(rMax / cellSize);
+        const colRingCount = Math.ceil(rMax / cellWidth);
+        const rowRingCount = Math.ceil(rMax / cellHeight);
 
-        for (let rowOffset = -ringCount; rowOffset < ringCount + 1; rowOffset++) {
-            for (let colOffset = -ringCount; colOffset < ringCount + 1; colOffset++) {
+        for (let rowOffset = -rowRingCount; rowOffset < rowRingCount + 1; rowOffset++) {
+            for (let colOffset = -colRingCount; colOffset < colRingCount + 1; colOffset++) {
                 let neighbourColumn: number | undefined = undefined;
                 let neighbourRow: number | undefined = undefined;
                 let neighbourCell: number | undefined = undefined;

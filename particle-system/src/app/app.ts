@@ -12,8 +12,10 @@ interface SimStaticParams {
     seed: number | string;
     particleCount: number;
     typeCount: number;
+    spacing: number;
     simWidth: number;
     simHeight: number;
+    aspectRatio: number;
 }
 interface SimLiveParams {
     speed: number;
@@ -35,15 +37,18 @@ export class AppController {
     loop: () => void = this.frameLoop.bind(this)
     private rafHandle?: number;
 
-    densityAim = 625
+    private spacingDefault = 25;
+    private aspectRatioDefault = 1;
+    private particleCountDefault = 3000;
+    private typeCountDefault = 3;
     // init default params
     simStaticParams = {
         // rebuild on change
         seed:           Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
-        particleCount:  Math.floor(window.innerWidth * window.innerHeight / this.densityAim), 
-        typeCount:      3,
-        simWidth:       window.innerWidth,
-        simHeight:      window.innerHeight,
+        particleCount:  this.particleCountDefault, 
+        typeCount:      this.typeCountDefault,
+        spacing:        this.spacingDefault,
+        aspectRatio:    this.aspectRatioDefault 
     } as SimStaticParams;
     simLiveParams = {
         speed: 0.1,
@@ -175,10 +180,15 @@ export class AppController {
             }
         }
     }
-
+    private adjustStaticWorldSize() {
+        const { spacing, particleCount, aspectRatio } = this.simStaticParams;
+        this.simStaticParams.simWidth = spacing * Math.sqrt(particleCount * aspectRatio);
+        this.simStaticParams.simHeight = spacing * Math.sqrt(particleCount / aspectRatio);
+    }
     async startSim() {
         await this.clearRunning()
         this.allocateLiveParamsArrays()
+        this.adjustStaticWorldSize()
         const config: Config = this.simStaticParams
         this.sim = new ParticleSimulator(config, this.simLiveParams.spatialModuleName, this.probe);
         if (Object.values(this.simLiveParams.rules).length !== this.simLiveParams.rules.length) {
