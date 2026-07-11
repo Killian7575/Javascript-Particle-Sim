@@ -12,7 +12,8 @@ export function TunablesPanel({ controller }: Props) {
   const [rMax, setRMax] = useState(controller.simLiveParams.typeRMax[0]);
   const [beta, setBeta] = useState(controller.simLiveParams.typeBeta[0]);
   const [friction, setFriction] = useState(controller.simLiveParams.friction);
-  const [boundary, setBoundary] = useState(controller.simLiveParams.boundaryMode)
+  const [boundary, setBoundary] = useState(controller.simLiveParams.boundaryMode);
+  const [maxVel, setMaxVel] = useState(controller.simLiveParams.maxVelocity);
 
 
   function handleSpeed(value: number) {
@@ -40,14 +41,20 @@ export function TunablesPanel({ controller }: Props) {
     controller.simLiveParams.boundaryMode = value;
     controller.applyLiveParams("boundary")
   }
+  function handleMaxVel(value: number) {
+    setMaxVel(value);
+    controller.simLiveParams.maxVelocity = value;
+    controller.applyLiveParams("maxVelocity");
+  }
 
   return (
     <div>
       <h3>Tunables</h3>
-      <Slider label="Speed"    value={speed}    min={0} max={1} step={0.1} onChange={handleSpeed} />
-      <Slider label="rMax"     value={rMax}     min={0} max={200} step={1} onChange={handleRMax} />
-      <Slider label="Beta"     value={beta}     min={0} max={1} step={0.05} onChange={handleBeta} />
-      <Slider label="Friction" value={friction} min={0} max={1} step={0.005} onChange={handleFriction} />
+      <Slider label="Speed"         value={speed}    min={0} max={1} step={0.1} onChange={handleSpeed} />
+      <Slider label="rMax"          value={rMax}     min={0} max={200} step={1} onChange={handleRMax} />
+      <Slider label="Beta"          value={beta}     min={0} max={1} step={0.05} onChange={handleBeta} />
+      <Slider label="Friction"      value={friction} min={0} max={1} step={0.005} onChange={handleFriction} />
+      <Slider label="Max Velocity"  value={maxVel}   min={0} max={10} step={1} onChange={handleMaxVel} />
       <Selector label="Border Mode" value={boundary}
         choices={["WRAP", "BOUNCE", "SNAP"]} names={["Wrap", "Bounce", "Snap"]}
         onChange={handleBoundary} />
