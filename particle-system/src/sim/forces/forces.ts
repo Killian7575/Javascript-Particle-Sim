@@ -1,4 +1,5 @@
 import { force } from "../../core/rules";
+import { clamp } from "../../core/util";
 
 export interface ComputeSliceForcesBuffers {
     pos: Float64Array<SharedArrayBuffer>;
@@ -17,6 +18,7 @@ export interface IntegrateSliceForcesParams {
     speed: number;
     dt: number;
     frictionMulti: number;
+    maxVel: number;
 }
 export function computeSliceForcesNoWrap(
     buffers: ComputeSliceForcesBuffers,
@@ -114,13 +116,15 @@ export function integrateSliceForces(
     
 ) {
     const { simWidth, simHeight } = world;
-    const { frictionMulti, speed, dt } = params
+    const { frictionMulti, speed, dt, maxVel } = params
     for (let i = slice[0]; i < slice[1]; i++) {
         const pi = i * dim;
         vel[pi] *= frictionMulti;
         vel[pi + 1] *= frictionMulti;
         vel[pi] += accum[pi] * speed * dt;
+        vel[pi] = clamp(vel[pi], -maxVel, maxVel);
         vel[pi + 1] += accum [pi + 1] * speed * dt;
+        vel[pi + 1] = clamp(vel[pi + 1], -maxVel, maxVel);
         posW[pi] = posR[pi] + vel[pi];
         posW[pi + 1] = posR[pi + 1] + vel[pi + 1]
         applyBoundary(pi)

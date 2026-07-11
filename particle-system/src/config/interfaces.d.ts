@@ -14,7 +14,7 @@ interface FullConfig extends Config {
   friction: number;
   rules: number[];
 }
-type SimParameter = "all" | "speed" | "rMax" | "beta" | "friction" | "rules" | "boundary"
+type SimParameter = "all" | "speed" | "rMax" | "beta" | "friction" | "rules" | "boundary" | "maxVelocity"
 interface World {
   simWidth: number;
   simHeight: number;
@@ -37,7 +37,7 @@ type SpatialModuleName = "GRID";
 type WorkerBoundaryModes = { WRAP: 0, BOUNCE: 1, SNAP: 2 };
 type WorkerControls = { FRAME: 0, COUNTER: 1, STATUS: 2 };
 type WorkerStatus = { RUNNING: 0, COMPLETE: 1, TERMINATED: 2 };
-type WorkerLiveParams = { DT: 0, SPEED: 1, FRICTION: 2, BOUNDARY: 3 };
+type WorkerLiveParams = { DT: 0, SPEED: 1, FRICTION: 2, BOUNDARY: 3, MAXVELOCITY: 4 };
 type WorkerReadWrite = { READ: 0, WRITE: 1 }
 interface WorkerConfig {
   workerInfo: {
