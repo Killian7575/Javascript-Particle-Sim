@@ -1,0 +1,20 @@
+.ratio-handle {
+  width: var(--radius);
+  height: var(--radius);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.ratio-handle:hover { background: var(--accent-bright); }
+
+.ratio-box {
+    background: var(--surface-bright);
+    border: 2px solid var(--border);
+    user-select: none;
+}
+.ratio-rectangle {
+    border: 2px solid var(--accent);
+}
+.ratio-readout {
+    user-select: none;
+}

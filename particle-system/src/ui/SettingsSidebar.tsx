@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AppController } from "../app/app.ts";
 import { TunablesPanel } from "./components/panels/LiveParamsPanel.tsx";
 import { StaticParamsPanel } from "./components/panels/StaticParamsPanel.tsx";
-
+import "./SettingsSidebar.css";
 // Props: the "inputs" a component receives from whoever renders it.
 // Think of it like a function signature.
 interface Props {
