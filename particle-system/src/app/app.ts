@@ -12,8 +12,10 @@ interface SimStaticParams {
     seed: number | string;
     particleCount: number;
     typeCount: number;
+    spacing: number;
     simWidth: number;
     simHeight: number;
+    aspectRatio: number;
 }
 interface SimLiveParams {
     speed: number;
@@ -33,23 +35,27 @@ export class AppController {
 
     lastFrame: number = 0;
     loop: () => void = this.frameLoop.bind(this)
+    private rafHandle?: number;
 
-    densityAim = 625
+    private spacingDefault = 25;
+    private aspectRatioDefault = 1;
+    private particleCountDefault = 3000;
+    private typeCountDefault = 3;
     // init default params
     simStaticParams = {
         // rebuild on change
         seed:           Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
-        particleCount:  Math.floor(window.innerWidth * window.innerHeight / this.densityAim), 
-        typeCount:      3,
-        simWidth:       window.innerWidth,
-        simHeight:      window.innerHeight,
+        particleCount:  this.particleCountDefault, 
+        typeCount:      this.typeCountDefault,
+        spacing:        this.spacingDefault,
+        aspectRatio:    this.aspectRatioDefault 
     } as SimStaticParams;
     simLiveParams = {
         speed: 0.1,
-        typeRMax: Array(this.simStaticParams.typeCount),
-        typeBeta: Array(this.simStaticParams.typeCount),
+        typeRMax: [],
+        typeBeta: [],
         friction: 0.05,
-        rules: Array(this.simStaticParams.typeCount ** 2),
+        rules: [],
         spatialModuleName: "GRID",
         boundaryMode: "WRAP",
     } as SimLiveParams;
@@ -164,41 +170,68 @@ export class AppController {
         this.sim.NEW_CHANGE = true;
     }
 
-
+    allocateLiveParamsArrays() {
+        if (this.simLiveParams.typeBeta.length !== this.simStaticParams.typeCount) {
+            this.simLiveParams.typeRMax = Array(this.simStaticParams.typeCount).fill(100)
+            this.simLiveParams.typeBeta = Array(this.simStaticParams.typeCount).fill(0.3)
+            this.simLiveParams.rules = Array(this.simStaticParams.typeCount ** 2) // TODO: type increment only randomise new slots
+            if (this.simStaticParams.typeCount === 3) {
+                this.simLiveParams.rules = this.testRules;
+            }
+        }
+    }
+    private adjustStaticWorldSize() {
+        const { spacing, particleCount, aspectRatio } = this.simStaticParams;
+        this.simStaticParams.simWidth = spacing * Math.sqrt(particleCount * aspectRatio);
+        this.simStaticParams.simHeight = spacing * Math.sqrt(particleCount / aspectRatio);
+    }
     async startSim() {
-        this.clearRunning()
+        await this.clearRunning()
+        this.allocateLiveParamsArrays()
+        this.adjustStaticWorldSize()
         const config: Config = this.simStaticParams
         this.sim = new ParticleSimulator(config, this.simLiveParams.spatialModuleName, this.probe);
-        if (!this.simLiveParams.rules) {
-            this.simLiveParams.rules = this.sim.rulesLive
+        if (Object.values(this.simLiveParams.rules).length !== this.simLiveParams.rules.length) {
+            this.simLiveParams.rules = this.sim.rulesLive;
         }
         this.applyLiveParams()
         await this.sim.ready()
 
-
         this.ren = new Renderer(this.sim)
         this.app.stage.addChild(this.ren.container);
 
-        window.requestAnimationFrame(this.loop);
+        this.startLoop()
     }
 
-    clearRunning() {
+    async clearRunning() {
+        this.stopLoop()
+        if (this.sim) {
+            await this.sim.terminate()
+            this.sim = undefined;
+        }
         if (this.ren) {
             this.app.stage.removeChild(this.ren.container);
+            this.ren.container.destroy({ children: true });
             this.ren = undefined;
         }
-        this.sim = undefined;
     }
 
     async frameLoop() {
         const { sim, ren } = this;
         await sim?.update(1);
         ren?.sync(this.sim);
-        window.requestAnimationFrame(this.loop);
+        this.rafHandle = window.requestAnimationFrame(this.loop);
     }
 
-    pauseLoop()  { this.app.ticker.stop();  }
-    resumeLoop() { this.app.ticker.start(); }
-    
-
+    stopLoop()  { 
+        this.app.ticker.stop();
+        if (this.rafHandle !== undefined) {
+            window.cancelAnimationFrame(this.rafHandle);
+            this.rafHandle = undefined;
+        }
+    }
+    startLoop() { 
+        this.app.ticker.start();
+        this.rafHandle = window.requestAnimationFrame(this.loop);
+    }
 }

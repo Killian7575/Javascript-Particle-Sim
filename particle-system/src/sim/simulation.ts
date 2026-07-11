@@ -56,6 +56,7 @@ export class ParticleSimulator {
   betaLive: number[];          // fraction of rMax that is pure repulsion
   readonly simWidth: number;       
   readonly simHeight: number;
+  readonly spacing: number;
   rulesLive: number[];   // typeCount*typeCount, each in [-1, 1]
   boundaryModeLive: BoundaryMode = "BOUNCE"
 
@@ -66,7 +67,7 @@ export class ParticleSimulator {
   probe: SimProbe | undefined;
 
   constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe ) {
-    const { seed, particleCount, typeCount, simWidth, simHeight,  } = config
+    const { seed, particleCount, typeCount, simWidth, simHeight, spacing } = config
     console.info(`Particle count is: ${particleCount}`);
     this.random = mulberry32(seed)
 
@@ -79,6 +80,7 @@ export class ParticleSimulator {
     this.typeCount = typeCount;
     this.simWidth = simWidth;
     this.simHeight = simHeight;
+    this.spacing = spacing
 
     const posBuffer0 = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
     const posBuffer1 = new Float64Array(new SharedArrayBuffer(bytesPerFloat64ArrayElement * particleCount * this.dim));
@@ -102,9 +104,12 @@ export class ParticleSimulator {
     
     this.requestedBuffers = {};
     for (const { name, byteLength } of getBufferSpec(spatialModuleName, {
-      simWidth: simWidth,
-      simHeight: simHeight,
-      particleCount: particleCount
+      spacing: spacing,
+      particleCount: particleCount,
+      world: {
+        simWidth: simWidth,
+        simHeight: simHeight,
+      }
     })) {
       this.requestedBuffers[name] = new SharedArrayBuffer(byteLength)
     }
@@ -113,6 +118,7 @@ export class ParticleSimulator {
       simHeight: simHeight,
       particleCount: particleCount,
       dimension: this.dim,
+      spacing: spacing,
       positions: this.posBuffers[this.posRW[this.POSIDX.READ]],
       requestedBuffers: this.requestedBuffers
     })
@@ -129,7 +135,7 @@ export class ParticleSimulator {
     this.initBufferParams()
     
     this.seed();
-    this.currentPositions = this.posBuffers[0]
+    this.currentPositions = this.posBuffers[this.posRW[this.POSIDX.WRITE]]
     this.readyPromise = new Promise((resolve) => {
       this.readyResolve = resolve; 
     });
@@ -195,6 +201,7 @@ export class ParticleSimulator {
         simWidth: this.simWidth,
         simHeight: this.simHeight,
         dimension: this.dim,
+        spacing: this.spacing,
         spatialModuleName: this.spatialModuleName,
         PARAMS: this.PARAMS,
         MODES: this.MODES,
@@ -237,8 +244,11 @@ export class ParticleSimulator {
   }
   async terminate(): Promise<void> {
     Atomics.store(this.controlSignal, this.CTRL.STATUS, this.STATUS.TERMINATED)
+    let i = 0;
     for (const worker of this.workerPool) {
       worker.terminate()
+      console.info(`Worker ${i} was terminated`)
+      i++
     }
   }
 

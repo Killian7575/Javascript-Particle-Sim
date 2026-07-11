@@ -5,6 +5,7 @@ interface Config {
   typeCount: number;
   simWidth: number;
   simHeight: number;
+  spacing: number;
 }
 interface FullConfig extends Config {
   speed: number;
@@ -51,6 +52,7 @@ interface WorkerConfig {
     simWidth: number;
     simHeight: number;
     dimension: number;
+    spacing: number;
     spatialModuleName: SpatialModuleName;
     PARAMS: WorkerLiveParams;
     MODES: WorkerBoundaryModes;
@@ -59,12 +61,26 @@ interface WorkerConfig {
   buffers: SimSharedBuffers;
 }
 interface PartitionModule {
-  getBufferSpec(sizeCfg: SpatialPartitionClassSizeConfig): BufferSpec[];
-  create(ctorCfg: SpatialPartitionClassConstructor): SpatialPartitionClass;
+  getBufferSpec(config: BufferSpecConfig): BufferSpec[];
+  create(config: SpatialPartitionClassConstructor): SpatialPartitionClass;
+  adjustWorldSize(config: AdjustWorldSizeConfig): World;
 }
 interface BufferSpec {
   name: string;
   byteLength: number;
+}
+interface World {
+  simWidth: number;
+  simHeight: number;
+}
+interface BufferSpecConfig {
+  spacing: spacing;
+  particleCount: number;
+  world: World;
+}
+interface AdjustWorldSizeConfig {
+  cellSizeConfig: CellSizeConfig;
+  world: World;
 }
 interface SpatialPartitionClass {
   boundaryMode: BoundaryMode;
@@ -83,6 +99,7 @@ interface SpatialPartitionClassConstructor {
   simHeight: number;
   particleCount: number;
   dimension: number;
+  spacing: number;
   positions: Float64Array<SharedArrayBuffer>;
   requestedBuffers: Record<string, SharedArrayBuffer>;
 }

@@ -32,7 +32,7 @@ class SimWorker {
 
     constructor(config: WorkerConfig) {
         const { workerId, workerSlice, controlSignal, CTRL } = config.workerInfo;
-        const { particleCount, typeCount, simWidth, simHeight, dimension, spatialModuleName, PARAMS, MODES, POSIDX } = config.simInfo;
+        const { particleCount, typeCount, simWidth, simHeight, dimension, spacing, spatialModuleName, PARAMS, MODES, POSIDX } = config.simInfo;
         const { posBuffers, posRW, velInterleaved, accumInterleaved, type, rules, typeRMax, typeBeta, liveParams, requestedBuffers } = config.buffers;
 
         this.workerId = workerId;
@@ -71,6 +71,7 @@ class SimWorker {
             simHeight: simHeight,
             particleCount: particleCount,
             dimension: dimension,
+            spacing: spacing,
             positions: posBuffers[posRW[POSIDX.READ]],
             requestedBuffers: requestedBuffers
         });
