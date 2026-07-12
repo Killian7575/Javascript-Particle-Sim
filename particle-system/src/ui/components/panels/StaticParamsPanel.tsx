@@ -12,6 +12,7 @@ export function StaticParamsPanel({ controller }: Props) {
     const [particleCount, setParticleCount] = useState(controller.simStaticParams.particleCount);
     const [typeCount, setTypeCount] = useState(controller.simStaticParams.typeCount);
     const [ratio, setRatio] = useState(controller.simStaticParams.aspectRatio);
+    const [spacing, setSpacing] = useState(controller.simStaticParams.spacing);
 
 
     function handleSeed(value: string | number) {
@@ -26,11 +27,15 @@ export function StaticParamsPanel({ controller }: Props) {
     function handleRatio(value: number) {
         setRatio(value)
     }
+    function handleSpacing(value: number) {
+        setSpacing(value)
+    }
     function handleApply() {
         controller.simStaticParams.seed = seed;
         controller.simStaticParams.particleCount = particleCount;
         controller.simStaticParams.typeCount = typeCount;
         controller.simStaticParams.aspectRatio = ratio;
+        controller.simStaticParams.spacing = spacing;
 
         controller.startSim();
     }
@@ -41,6 +46,7 @@ export function StaticParamsPanel({ controller }: Props) {
             <label>Seed: <input type="text" value={seed} onChange={e => handleSeed(e.target.value)} /></label>
             <Slider label="Particles"    value={particleCount}    min={0} max={10000} step={1} onChange={handleParticleCount} />
             <Slider label="Types"    value={typeCount}    min={1} max={256} step={1} onChange={handleTypeCount} />
+            <Slider label="Particle Spacing" value={spacing} min={10} max={100} step={1} onChange={handleSpacing} />
             <label>Map Shape: <RatioPicker value={ratio} onChange={handleRatio} /></label>
             <button onClick={handleApply}>Apply Changes</button>
         </div>

@@ -13,7 +13,7 @@ export function TunablesPanel({ controller }: Props) {
   const [beta, setBeta] = useState(controller.simLiveParams.typeBeta[0]);
   const [friction, setFriction] = useState(controller.simLiveParams.friction);
   const [boundary, setBoundary] = useState(controller.simLiveParams.boundaryMode);
-  const [maxVel, setMaxVel] = useState(controller.simLiveParams.maxVelocity);
+  const [maxAccel, setMaxAccel] = useState(controller.simLiveParams.maxAccel);
 
 
   function handleSpeed(value: number) {
@@ -42,9 +42,9 @@ export function TunablesPanel({ controller }: Props) {
     controller.applyLiveParams("boundary")
   }
   function handleMaxVel(value: number) {
-    setMaxVel(value);
-    controller.simLiveParams.maxVelocity = value;
-    controller.applyLiveParams("maxVelocity");
+    setMaxAccel(value);
+    controller.simLiveParams.maxAccel = value;
+    controller.applyLiveParams("maxAccel");
   }
 
   return (
@@ -54,7 +54,7 @@ export function TunablesPanel({ controller }: Props) {
       <Slider label="rMax"          value={rMax}     min={0} max={200} step={1} onChange={handleRMax} />
       <Slider label="Beta"          value={beta}     min={0} max={1} step={0.05} onChange={handleBeta} />
       <Slider label="Friction"      value={friction} min={0} max={1} step={0.005} onChange={handleFriction} />
-      <Slider label="Max Velocity"  value={maxVel}   min={0} max={10} step={1} onChange={handleMaxVel} />
+      <Slider label="Max Accel"  value={maxAccel}   min={0} max={100} step={1} onChange={handleMaxVel} />
       <Selector label="Border Mode" value={boundary}
         choices={["WRAP", "BOUNCE", "SNAP"]} names={["Wrap", "Bounce", "Snap"]}
         onChange={handleBoundary} />
