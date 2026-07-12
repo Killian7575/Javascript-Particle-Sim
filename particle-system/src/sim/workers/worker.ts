@@ -59,7 +59,9 @@ class SimWorker {
         };
         this.computeParams = {
             dim: dimension,
-            typeCount: typeCount
+            typeCount: typeCount,
+            maxAccelSquared: liveParams[PARAMS.MAXACCEL] * liveParams[PARAMS.MAXACCEL],
+            maxAccel: liveParams[PARAMS.MAXACCEL]
         };
         this.world = {
             simWidth: simWidth,
@@ -126,12 +128,14 @@ class SimWorker {
             }
         }
         computeBuffers.pos = posBuffers[posRW[POSIDX.READ]];
+        const maxAccel = liveParams[PARAMS.MAXACCEL];
+        computeParams.maxAccel = maxAccel;
+        computeParams.maxAccelSquared = maxAccel * maxAccel;
         spatial.positions = posBuffers[posRW[POSIDX.READ]];
         const integrateParams: IntegrateSliceForcesParams = {
             speed: liveParams[PARAMS.SPEED],
             dt: liveParams[PARAMS.DT],
             frictionMulti: liveParams[PARAMS.FRICTION],
-            maxVel: liveParams[PARAMS.MAXVELOCITY]
         }
         computeSliceForces(
             computeBuffers,

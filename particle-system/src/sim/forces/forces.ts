@@ -13,12 +13,13 @@ export interface ComputeSliceForcesBuffers {
 export interface ComputeSliceForcesParams {
     dim: number;
     typeCount: number;
+    maxAccel: number;
+    maxAccelSquared: number;
 }
 export interface IntegrateSliceForcesParams {
     speed: number;
     dt: number;
     frictionMulti: number;
-    maxVel: number;
 }
 export function computeSliceForcesNoWrap(
     buffers: ComputeSliceForcesBuffers,
@@ -29,7 +30,7 @@ export function computeSliceForcesNoWrap(
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
-    const { dim, typeCount } = params;
+    const { dim, typeCount, maxAccel, maxAccelSquared } = params;
     
         
     
@@ -54,10 +55,19 @@ export function computeSliceForcesNoWrap(
 
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const f = force(dist, a, rMax, beta);
-
                 accum[pi] += f * (dx / dist);
                 accum[pi + 1] += f * (dy / dist);
             }
+        }
+        const forceX = accum[pi];
+        const forceY = accum[pi + 1];
+
+        const forceLengthSquared = forceX * forceX + forceY * forceY;
+
+        if (forceLengthSquared > maxAccelSquared) {
+            const shrinkFactor = maxAccel / Math.sqrt(forceLengthSquared);
+            accum[pi] = forceX * shrinkFactor;
+            accum[pi + 1] = forceY * shrinkFactor;
         }
     }
 }
@@ -70,7 +80,7 @@ export function computeSliceForcesWrap(
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
-    const { dim, typeCount } = params;
+    const { dim, typeCount, maxAccel, maxAccelSquared } = params;
     const { simWidth, simHeight } = world;
     
     for (let i = slice[0]; i < slice[1]; i++) {
@@ -96,10 +106,19 @@ export function computeSliceForcesWrap(
 
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 const f = force(dist, a, rMax, beta);
-
                 accum[pi] += f * (dx / dist);
                 accum[pi + 1] += f * (dy / dist);
             }
+        }
+        const forceX = accum[pi];
+        const forceY = accum[pi + 1];
+
+        const forceLengthSquared = forceX * forceX + forceY * forceY;
+
+        if (forceLengthSquared > maxAccelSquared) {
+            const shrinkFactor = maxAccel / Math.sqrt(forceLengthSquared);
+            accum[pi] = forceX * shrinkFactor;
+            accum[pi + 1] = forceY * shrinkFactor;
         }
     }
 }
@@ -116,15 +135,15 @@ export function integrateSliceForces(
     
 ) {
     const { simWidth, simHeight } = world;
-    const { frictionMulti, speed, dt, maxVel } = params
+    const { frictionMulti, speed, dt } = params
     for (let i = slice[0]; i < slice[1]; i++) {
         const pi = i * dim;
         vel[pi] *= frictionMulti;
         vel[pi + 1] *= frictionMulti;
         vel[pi] += accum[pi] * speed * dt;
-        vel[pi] = clamp(vel[pi], -maxVel, maxVel);
-        vel[pi + 1] += accum [pi + 1] * speed * dt;
-        vel[pi + 1] = clamp(vel[pi + 1], -maxVel, maxVel);
+        let vx = vel[pi];
+        let vy = vel[pi + 1];
+        vel[pi + 1] += accum[pi + 1] * speed * dt;
         posW[pi] = posR[pi] + vel[pi];
         posW[pi + 1] = posR[pi + 1] + vel[pi + 1]
         applyBoundary(pi)
