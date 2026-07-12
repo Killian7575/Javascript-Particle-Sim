@@ -46,6 +46,13 @@ export function TunablesPanel({ controller }: Props) {
     controller.simLiveParams.maxAccel = value;
     controller.applyLiveParams("maxAccel");
   }
+  function handleRandomiseRules() {
+    if (controller.sim) {
+      controller.sim.randomRules();
+      controller.simLiveParams.rules = controller.sim.rulesLive;
+      controller.sim.NEW_CHANGE = true;
+    }
+  }
 
   return (
     <div>
@@ -58,6 +65,7 @@ export function TunablesPanel({ controller }: Props) {
       <Selector label="Border Mode" value={boundary}
         choices={["WRAP", "BOUNCE", "SNAP"]} names={["Wrap", "Bounce", "Snap"]}
         onChange={handleBoundary} />
+      <button onClick={handleRandomiseRules}>Random Rules</button>
     </div>
   );
 }
