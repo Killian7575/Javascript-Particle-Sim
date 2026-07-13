@@ -225,7 +225,9 @@ export class AppController {
 
     async frameLoop() {
         const { sim, ren } = this;
+        const currentFrame = this.lastFrame++
         await sim?.update(1);
+        if (currentFrame !== this.lastFrame) return;
         ren?.sync(this.sim);
         this.rafHandle = window.requestAnimationFrame(this.loop);
     }
