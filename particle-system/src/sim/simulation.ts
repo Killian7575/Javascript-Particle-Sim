@@ -1,6 +1,7 @@
 // import { force } from '../core/rules.ts';
 import { mulberry32 } from '../core/seededrng.ts';
 import { getBufferSpec, createPartitioner } from './spatialPartition/PartitionModules.ts';
+import { clamp } from '../core/util.ts';
 
 // SimProbe is a tiny interface defined in benchmark.ts.
 // In production, app.ts passes nothing; in dev, it passes bench.probe
@@ -67,7 +68,7 @@ export class ParticleSimulator {
   // --- Benchmarking Probe ---
   probe: SimProbe | undefined;
 
-  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe ) {
+  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe, cpuCorePercent: number = 0.75 ) {
     const { seed, particleCount, typeCount, simWidth, simHeight, spacing } = config
     console.info(`Particle count is: ${particleCount}`);
     this.random = mulberry32(seed)
@@ -141,7 +142,7 @@ export class ParticleSimulator {
     this.readyPromise = new Promise((resolve) => {
       this.readyResolve = resolve; 
     });
-    this.initWorkerPool(navigator.hardwareConcurrency);
+    this.initWorkerPool(clamp(Math.ceil(navigator.hardwareConcurrency * cpuCorePercent), 0, navigator.hardwareConcurrency));
   }
 
   private initBufferParams() {
@@ -245,13 +246,15 @@ export class ParticleSimulator {
     return this.readyPromise;
   }
   async terminate(): Promise<void> {
-    Atomics.store(this.controlSignal, this.CTRL.STATUS, this.STATUS.TERMINATED)
+    Atomics.store(this.controlSignal, this.CTRL.STATUS, this.STATUS.TERMINATED);
+    Atomics.store(this.controlSignal, this.CTRL.COUNTER, this.workerPool.length);
     let i = 0;
     for (const worker of this.workerPool) {
       worker.terminate()
       console.info(`Worker ${i} was terminated`)
       i++
     }
+    Atomics.notify(this.controlSignal, this.CTRL.COUNTER);
   }
 
   /* 
