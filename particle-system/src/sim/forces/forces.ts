@@ -1,5 +1,4 @@
 import { force } from "../../core/rules";
-import { clamp } from "../../core/util";
 
 export interface ComputeSliceForcesBuffers {
     pos: Float64Array<SharedArrayBuffer>;
@@ -24,27 +23,30 @@ export interface IntegrateSliceForcesParams {
 export function computeSliceForcesNoWrap(
     buffers: ComputeSliceForcesBuffers,
     slice: [start: number, end: number],
-    neighbourScratch: Uint32Array,
     world: World,
-    parse: SpatialPartitionClass["parse"],
+    spatial: SpatialPartitionClass,
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
     const { dim, typeCount, maxAccel, maxAccelSquared } = params;
     
-        
+    const candidates = spatial.candidates;
+    let n: number;    
     
     for (let i = slice[0]; i < slice[1]; i++) {
         const pi = i * dim;
         const iType = type[i];
         const rMax = typeRMax[iType];
         const beta = typeBeta[iType];
-        for (const n of parse({particleIndex: pi, rMax})) {
+        spatial.beginQuery(pi, rMax);
+        while ((n = spatial.nextBatch()) > 0) {
+            const off = spatial.qBatchOffset;
             for (let j = 0; j < n; j++) {
-                const pj = neighbourScratch[j] * dim;
+                const pIndex = candidates[j + off];
+                const pj = pIndex * dim;
                 if (pj === pi) continue;
                 
-                const jType = type[neighbourScratch[j]];
+                const jType = type[pIndex];
                 const a: number = rules[iType * typeCount + jType];
                 if (a === 0) continue;
 
@@ -74,26 +76,30 @@ export function computeSliceForcesNoWrap(
 export function computeSliceForcesWrap(
     buffers: ComputeSliceForcesBuffers,
     slice: [start: number, end: number],
-    neighbourScratch: Uint32Array,
     world: World, 
-    parse: SpatialPartitionClass["parse"],
+    spatial: SpatialPartitionClass,
     params: ComputeSliceForcesParams
 ): void {
     const { pos, accum, type, rules, typeRMax, typeBeta } = buffers;
     const { dim, typeCount, maxAccel, maxAccelSquared } = params;
     const { simWidth, simHeight } = world;
+    const candidates = spatial.candidates;
+    let n: number;
     
     for (let i = slice[0]; i < slice[1]; i++) {
         const pi = i * dim;
         const iType = type[i];
         const rMax = typeRMax[iType];
         const beta = typeBeta[iType];
-        for (const n of parse({particleIndex: pi, rMax})) {
+        spatial.beginQuery(pi, rMax);
+        while ((n = spatial.nextBatch()) > 0) {
+            const off = spatial.qBatchOffset;
             for (let j = 0; j < n; j++) {
-                const pj = neighbourScratch[j] * dim;
+                const pIndex = candidates[j + off];
+                const pj = pIndex * dim
                 if (pj === pi) continue;
                 
-                const jType = type[neighbourScratch[j]];
+                const jType = type[pIndex];
                 const a: number = rules[iType * typeCount + jType];
                 if (a === 0) continue;
 

@@ -44,9 +44,18 @@ export class Grid implements SpatialPartitionClass {
     private readonly cellWidth: number;
     private readonly cellHeight: number;
 
+    private qHomeCol = 0;
+    private qHomeRow = 0;
+    private qColRing = 0;
+    private qRowRing = 0;
+    private qColSpan = 0;
+    private qTotal = 0;
+    private qK = 0;
+    qBatchOffset = 0;
+
     positions: Float64Array<SharedArrayBuffer>;
     private readonly gridCellStartOffsets: Uint32Array<SharedArrayBuffer>;
-    private readonly gridSortedParticleIndicies: Uint32Array<SharedArrayBuffer>;
+    readonly candidates: Uint32Array<SharedArrayBuffer>;
 
     private readonly particlesPerCellCount: number[];
     private readonly particleCellIndex: number[];
@@ -54,8 +63,6 @@ export class Grid implements SpatialPartitionClass {
 
     private epoch: number;
     private readonly cellEpoch: Uint32Array;
-
-    readonly neighbourScratch: Uint32Array
 
     boundaryMode: BoundaryMode = "WRAP";
 
@@ -79,18 +86,17 @@ export class Grid implements SpatialPartitionClass {
 
         this.positions = positions;
         this.gridCellStartOffsets = new Uint32Array(gridCellStartOffsets);
-        this.gridSortedParticleIndicies = new Uint32Array(gridSortedParticleIndicies);
+        this.candidates = new Uint32Array(gridSortedParticleIndicies);
 
         this.particlesPerCellCount = Array(this.totalCells);
         this.particleCellIndex = Array(particleCount)
         this.cursorOfCellOffsets = new Uint32Array(this.totalCells + 1);
-        this.neighbourScratch = new Uint32Array(particleCount);
 
         this.epoch = 0;
         this.cellEpoch = new Uint32Array(this.totalCells);
     }
     static calcCellSize(spacing: number): { cellSize: number } {
-        const targetParticlesPerCell = 20;
+        const targetParticlesPerCell = 15;
         const cellSizeMultiplier =  Math.sqrt(targetParticlesPerCell); // averageParticlesPerCell = cellSizeMultiplier²
         return { cellSize: Math.floor(spacing) * cellSizeMultiplier };
     }
@@ -110,7 +116,7 @@ export class Grid implements SpatialPartitionClass {
         this.boundaryMode = input;
     }
     bin(): void {
-        const { gridCellStartOffsets, gridSortedParticleIndicies,
+        const { gridCellStartOffsets, candidates,
             particlesPerCellCount, particleCount, particleCellIndex,
             dimension: dim, totalCells, cursorOfCellOffsets,
             positions
@@ -138,59 +144,72 @@ export class Grid implements SpatialPartitionClass {
         cursorOfCellOffsets.set(gridCellStartOffsets);
         for (let i = 0; i < particleCount; i++) {
             const cell = particleCellIndex[i];
-            gridSortedParticleIndicies[cursorOfCellOffsets[cell]] = i;
+            candidates[cursorOfCellOffsets[cell]] = i;
             cursorOfCellOffsets[cell] += 1;
         }
     }
-    *parse(input: SpatialPartitionMethodParseInput): IterableIterator<number> {
-        const { particleIndex, rMax } = input;
+    beginQuery(particleIndex: number, rMax: number) {
         const { 
-            totalColumns, totalRows, boundaryMode,
-            gridCellStartOffsets, gridSortedParticleIndicies,
-            neighbourScratch, cellEpoch,
-            positions,
-            cellWidth, cellHeight
+            cellEpoch, positions, 
+            cellWidth, cellHeight,
+            totalColumns, totalRows
         } = this
 
         if (this.epoch++ === 0) { cellEpoch.fill(0); this.epoch = 1; } //epoch increment + overflow handle 
 
-        const homeColumn = clamp(Math.floor(positions[particleIndex] / cellWidth), 0, totalColumns - 1);
-        const homeRow = clamp(Math.floor(positions[particleIndex + 1] / cellHeight), 0, totalRows - 1);
+        this.qHomeCol = clamp(Math.floor(positions[particleIndex] / cellWidth), 0, totalColumns - 1);
+        this.qHomeRow = clamp(Math.floor(positions[particleIndex + 1] / cellHeight), 0, totalRows - 1);
         
-        const colRingCount = Math.ceil(rMax / cellWidth);
-        const rowRingCount = Math.ceil(rMax / cellHeight);
+        this.qColRing = Math.ceil(rMax / cellWidth);
+        this.qRowRing = Math.ceil(rMax / cellHeight);
+        
+        this.qColSpan = 2 * this.qColRing + 1;
+        this.qTotal = this.qColSpan * (2 * this.qRowRing + 1);
 
-        for (let rowOffset = -rowRingCount; rowOffset < rowRingCount + 1; rowOffset++) {
-            for (let colOffset = -colRingCount; colOffset < colRingCount + 1; colOffset++) {
-                let neighbourColumn: number | undefined = undefined;
-                let neighbourRow: number | undefined = undefined;
-                let neighbourCell: number | undefined = undefined;
-                const candidateNCol = homeColumn + colOffset;
-                const candidateNRow = homeRow + rowOffset;
-                if (boundaryMode === "WRAP") {
-                    neighbourColumn = (candidateNCol + totalColumns) % totalColumns
-                    neighbourRow = (candidateNRow + totalRows) % totalRows
-                } else if ((candidateNCol | candidateNRow) >= 0 &&
-                            candidateNCol < totalColumns &&
-                            candidateNRow < totalRows) {
-                    neighbourColumn = candidateNCol
-                    neighbourRow = candidateNRow
-                } else {
-                    continue;
-                }
-                neighbourCell = neighbourRow * totalColumns + neighbourColumn;
-                if (cellEpoch[neighbourCell] !== this.epoch) {
-                    cellEpoch[neighbourCell] = this.epoch;
-                    const start = gridCellStartOffsets[neighbourCell];
-                    const end = gridCellStartOffsets[neighbourCell + 1];
-                    const length = end - start;
-                    for (let i = 0; i < length; i++) {
-                        neighbourScratch[i] = gridSortedParticleIndicies[start + i]
-                    }
-                    yield length;
-                    // length & neighbourScratch only valid till next local parse yeild
-                }
+        this.qK = 0;
+    }
+    nextBatch(): number {
+        const {
+            qColRing, qRowRing, qColSpan,
+            qTotal, qHomeCol, qHomeRow,
+            boundaryMode, cellEpoch,
+            totalColumns, totalRows,
+            gridCellStartOffsets
+        } = this;
+        while (this.qK < qTotal) {
+            let neighbourColumn: number;
+            let neighbourRow: number;
+            let neighbourCell: number;
+            
+            const k = this.qK++;
+
+            const colOffset = (k % qColSpan) - qColRing;
+            const rowOffset = (k / qColSpan | 0) - qRowRing; // "| 0" coerces to integer 
+
+            
+            const candidateNCol = qHomeCol + colOffset;
+            const candidateNRow = qHomeRow + rowOffset;
+            if (boundaryMode === "WRAP") {
+                neighbourColumn = (candidateNCol + totalColumns) % totalColumns
+                neighbourRow = (candidateNRow + totalRows) % totalRows
+            } else if ((candidateNCol | candidateNRow) >= 0 &&
+                        candidateNCol < totalColumns &&
+                        candidateNRow < totalRows) {
+                neighbourColumn = candidateNCol
+                neighbourRow = candidateNRow
+            } else {
+                continue;
+            }
+            neighbourCell = neighbourRow * totalColumns + neighbourColumn;
+            if (cellEpoch[neighbourCell] !== this.epoch) {
+                cellEpoch[neighbourCell] = this.epoch;
+                const start = gridCellStartOffsets[neighbourCell];
+                const length = gridCellStartOffsets[neighbourCell + 1] - start;
+                if (length === 0) continue;
+                this.qBatchOffset = start;
+                return length;
             }
         }
+        return 0
     }
 }

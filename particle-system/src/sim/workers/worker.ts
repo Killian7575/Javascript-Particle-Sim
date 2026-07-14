@@ -26,7 +26,6 @@ class SimWorker {
     private readonly liveParams: SimSharedBuffers["liveParams"];
 
     private readonly spatial: SpatialPartitionClass;
-    private readonly parse: SpatialPartitionClass["parse"];
 
     readonly workerSlice: [number, number];
 
@@ -77,7 +76,6 @@ class SimWorker {
             positions: posBuffers[posRW[POSIDX.READ]],
             requestedBuffers: requestedBuffers
         });
-        this.parse = this.spatial.parse.bind(this.spatial)
 
     }
     start() {
@@ -140,9 +138,8 @@ class SimWorker {
         computeSliceForces(
             computeBuffers,
             workerRange,
-            spatial.neighbourScratch,
             world,
-            this.parse,
+            this.spatial,
             computeParams)
         integrateSliceForces(
             posBuffers[posRW[POSIDX.READ]],
