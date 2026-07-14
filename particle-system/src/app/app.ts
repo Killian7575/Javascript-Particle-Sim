@@ -5,6 +5,7 @@ import { Application } from 'pixi.js';
 import { ParticleSimulator } from '../sim/simulation';
 import { Renderer } from '../render/render';
 import { BenchmarkingTool, type SimProbe } from '../../test/benchmark/benchmark';
+import { SimTester } from '../../test/headlessSimRunner'
 
 const BENCH_ENABLED = import.meta.env.DEV;
 
@@ -33,6 +34,7 @@ export class AppController {
     sim:    ParticleSimulator | undefined = undefined;
     ren:    Renderer          | undefined = undefined;
     bench:  BenchmarkingTool  | undefined = undefined;
+    simTester: SimTester | undefined = undefined;
 
     lastFrame: number = 0;
     loop: () => void = this.frameLoop.bind(this)
@@ -85,10 +87,12 @@ export class AppController {
         if (BENCH_ENABLED) {
             this.bench = new BenchmarkingTool();
             this.probe = this.bench.getProbe;
+            // this.simTester = new SimTester()
 
             // Expose to browser devtools
             window.__app = this;
             window.__bench = this.bench;
+            // window.__simTester = this.simTester;
             window.__startBench = (frames: number = 10000, runs: number = 3, warmup: number = 60, cfg: FullConfig) =>
                 this.runBench(frames, runs, warmup, cfg);
         }
@@ -189,8 +193,8 @@ export class AppController {
     }
     private adjustStaticWorldSize() {
         const { spacing, particleCount, aspectRatio } = this.simStaticParams;
-        this.simStaticParams.simWidth = spacing * Math.sqrt(particleCount * aspectRatio);
-        this.simStaticParams.simHeight = spacing * Math.sqrt(particleCount / aspectRatio);
+        this.simStaticParams.simWidth = Math.round(spacing * Math.sqrt(particleCount * aspectRatio));
+        this.simStaticParams.simHeight = Math.round(spacing * Math.sqrt(particleCount / aspectRatio));
     }
     async startSim() {
         await this.clearRunning()
@@ -225,7 +229,8 @@ export class AppController {
 
     async frameLoop() {
         const { sim, ren } = this;
-        const currentFrame = this.lastFrame++
+        this.lastFrame++;
+        const currentFrame = this.lastFrame;
         await sim?.update(1);
         if (currentFrame !== this.lastFrame) return;
         ren?.sync(this.sim);

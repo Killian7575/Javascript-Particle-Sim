@@ -68,7 +68,7 @@ export class ParticleSimulator {
   // --- Benchmarking Probe ---
   probe: SimProbe | undefined;
 
-  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe, cpuCorePercent: number = 0.75 ) {
+  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe, cpuCorePercent: number = 0.67 ) {
     const { seed, particleCount, typeCount, simWidth, simHeight, spacing } = config
     console.info(`Particle count is: ${particleCount}`);
     this.random = mulberry32(seed)
@@ -142,7 +142,7 @@ export class ParticleSimulator {
     this.readyPromise = new Promise((resolve) => {
       this.readyResolve = resolve; 
     });
-    this.initWorkerPool(clamp(Math.ceil(navigator.hardwareConcurrency * cpuCorePercent), 0, navigator.hardwareConcurrency));
+    this.initWorkerPool(clamp(Math.ceil(navigator.hardwareConcurrency * cpuCorePercent), 1, navigator.hardwareConcurrency * 2));
   }
 
   private initBufferParams() {
@@ -314,7 +314,6 @@ export class ParticleSimulator {
     // UPDATE PARTICLE POSITIONS
     probe?.startSpan("sim:update:referenceCurrentPos");
     this.currentPositions = this.posBuffers[posRW[POSIDX.WRITE]];
-    this.accumInterleaved.fill(0);
     probe?.endSpan("sim:update:referenceCurrentPos")
 
     probe?.endSpan("sim:update");

@@ -141,11 +141,11 @@ export function integrateSliceForces(
         vel[pi] *= frictionMulti;
         vel[pi + 1] *= frictionMulti;
         vel[pi] += accum[pi] * speed * dt;
-        let vx = vel[pi];
-        let vy = vel[pi + 1];
         vel[pi + 1] += accum[pi + 1] * speed * dt;
         posW[pi] = posR[pi] + vel[pi];
-        posW[pi + 1] = posR[pi + 1] + vel[pi + 1]
+        posW[pi + 1] = posR[pi + 1] + vel[pi + 1];
+        accum[pi] = 0;
+        accum[pi + 1] = 0;
         applyBoundary(pi)
     }
     function applyBoundary(i: number) {
