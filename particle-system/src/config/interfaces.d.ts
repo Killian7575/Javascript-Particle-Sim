@@ -85,10 +85,11 @@ interface AdjustWorldSizeConfig {
 interface SpatialPartitionClass {
   boundaryMode: BoundaryMode;
   positions: Float64Array<SharedArrayBuffer>;
-  neighbourScratch: Uint32Array;
+  candidates: Uint32Array;
+  qBatchOffset: number;
   bin(): void;
-  parse(input: SpatialPartitionClassParseInput):
-    IterableIterator<number>;
+  beginQuery(particleIndex: number, rMax: number): void;
+  nextBatch(): number;
 }
 interface SpatialPartitionClassParseInput {
   particleIndex: number;
