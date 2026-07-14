@@ -47,7 +47,7 @@ export class AppController {
     // init default params
     simStaticParams = {
         // rebuild on change
-        seed:           Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
+        seed:           (BENCH_ENABLED) ? "test-seed" as number | string : Math.random() as number | string, // Future: may create a string library to pick/string constructor from for easier default reproducibility
         particleCount:  this.particleCountDefault, 
         typeCount:      this.typeCountDefault,
         spacing:        this.spacingDefault,
