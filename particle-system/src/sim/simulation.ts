@@ -68,7 +68,7 @@ export class ParticleSimulator {
   // --- Benchmarking Probe ---
   probe: SimProbe | undefined;
 
-  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe, cpuCorePercent: number = 0.67 ) {
+  constructor(config: Config, spatialModuleName: SpatialModuleName, injectedProbe?: SimProbe, cpuCorePercent: number = 7/12 ) {
     const { seed, particleCount, typeCount, simWidth, simHeight, spacing } = config
     console.info(`Particle count is: ${particleCount}`);
     this.random = mulberry32(seed)
