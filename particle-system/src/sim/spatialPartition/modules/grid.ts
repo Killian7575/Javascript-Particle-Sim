@@ -96,7 +96,7 @@ export class Grid implements SpatialPartitionClass {
         this.cellEpoch = new Uint32Array(this.totalCells);
     }
     static calcCellSize(spacing: number): { cellSize: number } {
-        const targetParticlesPerCell = 15;
+        const targetParticlesPerCell = 20;
         const cellSizeMultiplier =  Math.sqrt(targetParticlesPerCell); // averageParticlesPerCell = cellSizeMultiplier²
         return { cellSize: Math.floor(spacing) * cellSizeMultiplier };
     }
