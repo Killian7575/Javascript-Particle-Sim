@@ -155,7 +155,8 @@ export class Grid implements SpatialPartitionClass {
             totalColumns, totalRows
         } = this
 
-        if (this.epoch++ === 0) { cellEpoch.fill(0); this.epoch = 1; } //epoch increment + overflow handle 
+        this.epoch = (this.epoch + 1) >>> 0;
+        if (this.epoch === 0) { cellEpoch.fill(0); this.epoch = 1; } //epoch increment + overflow handle 
 
         this.qHomeCol = clamp(Math.floor(positions[particleIndex] / cellWidth), 0, totalColumns - 1);
         this.qHomeRow = clamp(Math.floor(positions[particleIndex + 1] / cellHeight), 0, totalRows - 1);
