@@ -61,5 +61,6 @@ Current milestone: `cpu-parallel-v1.1` (tagged) — parallel CPU simulation.
 TypeScript · Vite · Pixi.js v8 · Web Workers · SharedArrayBuffer / Atomics · React (GUI branch)
 
 ## License
+Copyright (C) 2026 DufusLupus
 
-MIT — see [LICENSE](LICENSE).
+This project is licensed under the GNU Affero General Public License v3.0 — see [LICENSE](LICENSE) for the full text.
